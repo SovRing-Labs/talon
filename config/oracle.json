@@ -1,0 +1,33 @@
+{
+  "role": "oracle",
+  "plugins": [
+    {"name": "oracle-dashboard", "load_priority": 10},
+    {"name": "oracle-logscan", "load_priority": 20},
+    {"name": "oracle-reconcile", "load_priority": 30},
+    {"name": "oracle-lane-watch", "load_priority": 40},
+    {"name": "oracle-brief-annotator", "load_priority": 50},
+    {"name": "oracle-session-snapshot", "load_priority": 60},
+    {"name": "oracle-done-gate-proxy", "load_priority": 70}
+  ],
+  "mcp_tools": [
+    {"name": "oracle_status", "description": "Fleet/plan status", "args": []},
+    {"name": "oracle_reconcile", "description": "Reconcile board with db", "args": []},
+    {"name": "oracle_lanes", "description": "Lane heat/alert state", "args": []},
+    {"name": "oracle_annotate", "description": "Annotate brief", "args": ["brief_name", "annotation"]},
+    {"name": "oracle_snapshot", "description": "Capture session snapshot", "args": ["session_name"]},
+    {"name": "oracle_done_gate", "description": "Call done-gate binary", "args": ["task_id"]}
+  ],
+  "key_bindings": {
+    "Ctrl+Shift+L": "logscan",
+    "Ctrl+Shift+W": "lane_watch_panel",
+    "Ctrl+R": "replay_snapshot",
+    "Ctrl+E": "copy_error_summary"
+  },
+  "swarm_bus_prefix": "oracle",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  },
+  "plan_path": "control-center/PLAN.md",
+  "done_gate_bin": "bin/done-gate"
+}

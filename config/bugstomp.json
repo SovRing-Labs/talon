@@ -1,0 +1,35 @@
+{
+  "role": "bugstomp",
+  "description": "Forensic Debugging Lab for root-cause isolation and defect extermination",
+  "plugins": [
+    {"name": "core-memory", "load_priority": 10},
+    {"name": "andon-guard", "load_priority": 15},
+    {"name": "stack-trace-nav", "load_priority": 20},
+    {"name": "oracle-logscan", "load_priority": 25},
+    {"name": "oracle-done-gate-proxy", "load_priority": 30},
+    {"name": "fleet-docs-search", "load_priority": 35}
+  ],
+  "mcp_tools": [
+    {"name": "bugstomp_log_tail", "description": "Tail active fleet and daemon logs", "args": ["service"]},
+    {"name": "bugstomp_trace_goto", "description": "Navigate to stack trace frame", "args": ["frame_id"]},
+    {"name": "bugstomp_andon_trip", "description": "Halt line upon defect discovery", "args": ["reason"]},
+    {"name": "bugstomp_verify_fix", "description": "Execute regression test verifying fix", "args": ["cmd"]}
+  ],
+  "key_bindings": {
+    "F5": "log_tail",
+    "Ctrl+T": "next_trace",
+    "Ctrl+M": "core_memory_recall",
+    "Ctrl+Shift+A": "andon_trip",
+    "Ctrl+E": "copy_error_summary"
+  },
+  "universal_skills": [
+    "troubleshoot",
+    "adversarial-self-audit",
+    "staged-not-cutover"
+  ],
+  "swarm_bus_prefix": "bugstomp",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  }
+}

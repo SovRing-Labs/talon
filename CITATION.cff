@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "talon: standalone agent runtime, role-shell harness, and local execution engine"
+version: 0.1.0
+abstract: "A modular, role-based agent runtime and CLI execution engine: native model provider routing (Ollama, local vLLM, OpenRouter), local session persistence, tool execution loop, TUI dashboard, and role specialization shells. Published as prior art."
+authors:
+  - family-names: "De Santiago"
+    given-names: "Juan Carlos"
+license:
+  - PolyForm-Small-Business-1.0.0
+  - PolyForm-Noncommercial-1.0.0
+keywords: [LLM agents, agent runtime, role shell, terminal launcher, execution engine, python]

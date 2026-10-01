@@ -1,0 +1,29 @@
+{
+  "role": "grunt",
+  "plugins": [
+    {"name": "quick-output", "load_priority": 20},
+    {"name": "auto-cd", "load_priority": 20},
+    {"name": "cmd-cache", "load_priority": 20},
+    {"name": "session-timer", "load_priority": 20},
+    {"name": "git-status-watcher", "load_priority": 20}
+  ],
+  "mcp_tools": [
+    {"name": "grunt_quick_summary", "description": "Output summary", "args": []},
+    {"name": "grunt_auto_cd", "description": "Auto-cd to repo", "args": []},
+    {"name": "grunt_session_time", "description": "Session elapsed time", "args": []},
+    {"name": "grunt_git_state", "description": "Git state for session", "args": []}
+  ],
+  "key_bindings": {
+    "Ctrl+T": "timer",
+    "Mod+o": "summary",
+    "Mod+d": "auto_cd",
+    "Mod+c": "cache",
+    "Mod+g": "git_watcher"
+  },
+  "swarm_bus_prefix": "term-launcher.session",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  },
+  "cache_ttl_seconds": 300
+}

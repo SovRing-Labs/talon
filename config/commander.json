@@ -1,0 +1,51 @@
+{
+  "role": "commander",
+  "plugins": [
+    {"name": "captain-log", "load_priority": 5},
+    {"name": "fleet-commander", "load_priority": 20},
+    {"name": "brief-deck", "load_priority": 30},
+    {"name": "task-radar", "load_priority": 40},
+    {"name": "log-stream", "load_priority": 50},
+    {"name": "exec-pad", "load_priority": 60}
+  ],
+  "mcp_tools": [
+    {"name": "commander_fleet_status", "description": "Fleet session/dispatch overview", "args": []},
+    {"name": "commander_dispatcherd_query", "description": "Query dispatcherd queue state", "args": []},
+    {"name": "commander_session_tail", "description": "Tail session output", "args": ["session_name"]},
+    {"name": "commander_list_briefs", "description": "List available briefs", "args": []},
+    {"name": "commander_launch_brief", "description": "Launch a brief by name", "args": ["brief_name"]},
+    {"name": "commander_brief_status", "description": "Status of active brief", "args": []},
+    {"name": "commander_worktree_status", "description": "Worktree lock state", "args": []},
+    {"name": "commander_release_worktree", "description": "Release a worktree lock", "args": ["worktree_name"]},
+    {"name": "commander_logstream_add", "description": "Add log source", "args": ["source_path"]},
+    {"name": "commander_logstream_remove", "description": "Remove log source", "args": ["source_path"]},
+    {"name": "commander_sequence_record", "description": "Record exec sequence", "args": ["sequence_name"]},
+    {"name": "commander_sequence_stop", "description": "Stop recording", "args": []},
+    {"name": "commander_sequence_run", "description": "Run recorded sequence", "args": ["sequence_name"]},
+    {"name": "commander_sequence_list", "description": "List sequences", "args": []},
+    {"name": "commander_audit_write", "description": "Write audit entry", "args": ["entry"]},
+    {"name": "commander_audit_query", "description": "Query audit log", "args": ["limit"]},
+    {"name": "commander_audit_export", "description": "Export audit log", "args": ["format"]},
+    {"name": "commander_wait_on", "description": "Wait on task/swarm completion without burning tokens", "args": ["target", "timeout"]},
+    {"name": "commander_auto_loop", "description": "Toggle autonomous dormant loop mode anytime", "args": ["action"]}
+  ],
+  "key_bindings": {
+    "Ctrl+\\": "brief_picker",
+    "Ctrl+K": "log_stream_toggle",
+    "Ctrl+Shift+T": "worktree_radar",
+    "Ctrl+Shift+B": "last_brief",
+    "Ctrl+Shift+G": "mini_log",
+    "Ctrl+Shift+;": "audit_annotation",
+    "Ctrl+;": "audit_overlay",
+    "Alt+B": "jump_to_brief",
+    "Alt+E": "run_sequence"
+  },
+  "swarm_bus_prefix": "commander",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  },
+  "dispatcherd_db": "control-center/dispatch.db",
+  "dispatch_ledger": "control-center/dispatch-ledger.jsonl",
+  "captain_log_dir": "~/.local/share/terminal-launcher/captain-log"
+}

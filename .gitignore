@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.log
+*.db
+*.sqlite
+*.backup
+*.bak
+keys.json
+auth.json
+talon.db

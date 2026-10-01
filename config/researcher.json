@@ -1,0 +1,30 @@
+{
+  "role": "researcher",
+  "plugins": [
+    {"name": "research-code-index", "load_priority": 10},
+    {"name": "research-web-search", "load_priority": 20},
+    {"name": "research-notes", "load_priority": 20},
+    {"name": "research-url-capture", "load_priority": 20},
+    {"name": "research-session-summary", "load_priority": 50},
+    {"name": "research-clipboard", "load_priority": 20}
+  ],
+  "mcp_tools": [
+    {"name": "researcher_search", "description": "Web search", "args": ["query"]},
+    {"name": "researcher_note", "description": "Save note", "args": ["note"]},
+    {"name": "researcher_urls", "description": "List captured URLs", "args": []},
+    {"name": "researcher_grep_code", "description": "Search code index", "args": ["pattern"]},
+    {"name": "researcher_summary", "description": "Session summary", "args": []},
+    {"name": "researcher_clip_yank", "description": "Yank to clipboard", "args": ["content"]}
+  ],
+  "key_bindings": {
+    "Ctrl+Shift+Y": "clipboard_yank",
+    "Ctrl+Shift+V": "clipboard_paste"
+  },
+  "swarm_bus_prefix": "researcher",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  },
+  "research_data_dir": "~/.local/share/terminal-launcher",
+  "code_index_db": "~/.local/share/terminal-launcher/code-index.sqlite"
+}

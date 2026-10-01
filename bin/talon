@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# talon — agent engine + role-equipped terminal exoskeleton.
+#   talon run --agent dev -m <lane> "prompt"   · talon sessions · talon session <id> · talon lanes · talon serve
+#   talon --role commander --tui · talon --list · talon --selftest      (terminal launcher)
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONPATH="$DIR/src:${PYTHONPATH}"
+case "${1:-}" in
+  run|sessions|session|lanes|serve) exec python3 "$DIR/src/talon_run.py" "$@" ;;
+  *) exec python3 "$DIR/src/main.py" "$@" ;;
+esac

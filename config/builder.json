@@ -1,0 +1,45 @@
+{
+  "role": "builder",
+  "plugins": [
+    {"name": "git-workflow", "load_priority": 20},
+    {"name": "build-runner", "load_priority": 20},
+    {"name": "project-context", "load_priority": 25},
+    {"name": "snippet-bank", "load_priority": 30},
+    {"name": "stack-trace-nav", "load_priority": 35},
+    {"name": "file-template", "load_priority": 40}
+  ],
+  "mcp_tools": [
+    {"name": "builder_build_run", "description": "Run build command", "args": ["cmd", "cwd"]},
+    {"name": "builder_build_watch", "description": "Watch mode for builds", "args": ["cmd"]},
+    {"name": "builder_git_status", "description": "Git status for project", "args": []},
+    {"name": "builder_git_commit", "description": "Git commit", "args": ["message"]},
+    {"name": "builder_git_push", "description": "Git push", "args": ["remote", "branch"]},
+    {"name": "builder_snippet_save", "description": "Save snippet", "args": ["key", "content"]},
+    {"name": "builder_snippet_insert", "description": "Insert snippet", "args": ["key"]},
+    {"name": "builder_trace_goto", "description": "Navigate to trace frame", "args": ["frame_id"]},
+    {"name": "builder_template_expand", "description": "Expand file template", "args": ["template_name", "vars"]},
+    {"name": "builder_project_tree", "description": "Show project tree", "args": ["path"]}
+  ],
+  "key_bindings": {
+    "Ctrl+B": "build_runner",
+    "Ctrl+D": "project_deps",
+    "Ctrl+E": "copy_error_summary",
+    "Ctrl+G": "git_status",
+    "Ctrl+O": "checkout_branch",
+    "Ctrl+T": "next_trace",
+    "Ctrl+W": "toggle_watch",
+    "Ctrl+R": "recent_files",
+    "Ctrl+I": "project_tree",
+    "Ctrl+N": "new_file_scaffold",
+    "Ctrl+/": "snippet_search",
+    "Ctrl+Shift+B": "test",
+    "Ctrl+Shift+G": "stage_and_commit"
+  },
+  "swarm_bus_prefix": "builder",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  },
+  "snippets_dir": "~/.config/terminal-launcher/snippets",
+  "templates_dir": "~/.config/terminal-launcher/templates"
+}

@@ -1,0 +1,37 @@
+{
+  "role": "dev",
+  "description": "Interactive Studio Seat for fast pair-programming and immediate implementation",
+  "plugins": [
+    {"name": "core-memory", "load_priority": 10},
+    {"name": "andon-guard", "load_priority": 15},
+    {"name": "git-workflow", "load_priority": 20},
+    {"name": "build-runner", "load_priority": 20},
+    {"name": "project-context", "load_priority": 25},
+    {"name": "snippet-bank", "load_priority": 30},
+    {"name": "fleet-docs-search", "load_priority": 35}
+  ],
+  "mcp_tools": [
+    {"name": "dev_build_run", "description": "Run rapid build or test command", "args": ["cmd", "cwd"]},
+    {"name": "dev_git_diff", "description": "Inspect uncommitted diffs", "args": []},
+    {"name": "dev_doc_lookup", "description": "Fast schema/docs lookup via fleet-docs", "args": ["query"]},
+    {"name": "dev_memory_recall", "description": "Recall project invariants and lessons", "args": ["query"]}
+  ],
+  "key_bindings": {
+    "F3": "test",
+    "F4": "git_diff",
+    "Ctrl+B": "build_runner",
+    "Ctrl+M": "core_memory_recall",
+    "Ctrl+/": "snippet_search",
+    "Ctrl+G": "git_status"
+  },
+  "universal_skills": [
+    "imagine",
+    "grounding-before-build",
+    "verify-then-mark"
+  ],
+  "swarm_bus_prefix": "dev",
+  "session_template": {
+    "shell": "/bin/bash",
+    "cwd": "~/ai-stack"
+  }
+}

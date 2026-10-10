@@ -7,6 +7,7 @@ with env filtering, and worktree isolation.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 import subprocess
@@ -222,7 +223,8 @@ def filter_env_for_save(env: dict[str, str]) -> dict[str, str]:
     for key, value in env.items():
         if key in SAFE_ENV_VARS:
             filtered[key] = value
-        elif not any(secret in key.upper() for secret in _SECRET_ENV_PATTERNS):
+        elif not any(secret in key.upper() for secret in _SECRET_ENV_PATTERNS) and not re.search(
+                r"KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH|COOKIE|PRIVATE", key, re.I):
             filtered[key] = value
     return filtered
 

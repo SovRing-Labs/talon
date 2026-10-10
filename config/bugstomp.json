@@ -30,6 +30,6 @@
   "swarm_bus_prefix": "bugstomp",
   "session_template": {
     "shell": "/bin/bash",
-    "cwd": "~/ai-stack"
+    "cwd": "~"
   }
 }

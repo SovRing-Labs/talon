@@ -1,7 +1,7 @@
 """OpenAI-compatible model provider client for the Talon Agent Engine.
 
 Resolves a lane (lane-catalog.db id or model id) to (base_url, model, api_key) and runs
-/v1/chat/completions. Rewritten 2026-09-26 (TALON-COMPLETE, bugs #62/#64):
+/v1/chat/completions. Rewritten 2026-09-26 (bugs #62/#64):
   - catalog provider -> its real endpoint (zen -> opencode.ai/zen/v1, not OpenRouter)
   - the lane prefix is stripped: `openrouter/nvidia/x:free` is sent as `nvidia/x:free`
   - keys come from engine.config.resolve_key (env -> talon keys -> opencode auth -> jsonc)
@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -69,6 +70,138 @@ KEYLESS = {"local", "ollama"}
 OPENCODE_ONLY = {"zen-free"}
 
 
+# Vertex AI (Gemini) via its OpenAI-compatible endpoint, authenticated with Google
+# application-default credentials (the same ADC opencode's @ai-sdk/google-vertex uses).
+# Lane form: `<opencode provider>/<model>`, e.g. `vertexii/gemini-2.5-flash`; project and
+# location come from that provider's opencode.jsonc options (env VERTEX_PROJECT /
+# VERTEX_LOCATION override). Added 2026-10-02: the author's Vertex models were reachable from opencode
+# only. Vertex's Anthropic models (vertex-claude) use a different API and are not served here.
+VERTEX_PROVIDERS = {"vertexii", "vertex", "google-vertex"}
+_ADC: dict[str, Any] = {}
+
+
+def vertex_settings(provider: str) -> tuple[str, str]:
+    opts = ((config.opencode_config().get("provider") or {}).get(provider) or {}).get("options") or {}
+    project = os.environ.get("VERTEX_PROJECT") or opts.get("project") or ""
+    location = os.environ.get("VERTEX_LOCATION") or opts.get("location") or "global"
+    return project, location
+
+
+def vertex_models(provider: str = "vertexii") -> list[str]:
+    block = (config.opencode_config().get("provider") or {}).get(provider) or {}
+    return list((block.get("models") or {}).keys())
+
+
+def adc_token() -> str:
+    """A fresh ADC access token (cached creds, refreshed when expired). '' when ADC is absent."""
+    try:
+        import google.auth
+        import google.auth.transport.requests
+    except ImportError:
+        return ""
+    creds = _ADC.get("creds")
+    try:
+        if creds is None:
+            creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            _ADC["creds"] = creds
+        if not creds.valid:
+            creds.refresh(google.auth.transport.requests.Request())
+        return creds.token or ""
+    except Exception as e:  # no ADC / revoked: the lane reports it instead of a bare 401
+        log.warning("vertex: ADC unavailable: %s", e)
+        return ""
+
+
+def _vertex_lane(provider: str, model: str) -> tuple[str, str, str]:
+    project, location = vertex_settings(provider)
+    if not project:
+        raise LaneError(f"lane {provider}/{model}: no Vertex project (opencode.jsonc provider.{provider}.options.project or VERTEX_PROJECT)")
+    host = "aiplatform.googleapis.com" if location == "global" else f"{location}-aiplatform.googleapis.com"
+    token = adc_token()
+    if not token:
+        raise LaneError(f"lane {provider}/{model}: no Google application-default credentials (gcloud auth application-default login)")
+    base = f"https://{host}/v1/projects/{project}/locations/{location}/endpoints/openapi"
+    return base, model if "/" in model else f"google/{model}", token
+
+
+_LIMITS: dict[str, tuple[Optional[int], Optional[int]]] = {}
+
+
+def lane_limits(lane: str) -> tuple[Optional[int], Optional[int]]:
+    """(context, max_output) for a lane, from where bin/model-limits recorded them (2026-10-02):
+    lane-catalog.db models.ctx_len/max_output for catalog lanes, opencode.jsonc limit{} for
+    vertex lanes. (None, None) when unknown — callers keep their default."""
+    if lane in _LIMITS:
+        return _LIMITS[lane]
+    out: tuple[Optional[int], Optional[int]] = (None, None)
+    head, _, model = lane.partition("/")
+    if head in VERTEX_PROVIDERS:
+        spec = (((config.opencode_config().get("provider") or {}).get(head) or {}).get("models") or {}).get(model) or {}
+        lim = spec.get("limit") or {}
+        out = (lim.get("context") or 1048576, lim.get("output") or 65536)
+    elif LANE_CATALOG_DB.exists():
+        try:
+            conn = sqlite3.connect(f"file:{LANE_CATALOG_DB}?mode=ro", uri=True, timeout=5.0)
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(models)")}
+            if "max_output" in cols:
+                row = conn.execute("SELECT m.ctx_len, m.max_output FROM lanes l JOIN models m ON m.id = l.model_id "
+                                   "WHERE l.id = ? OR l.model_id = ? LIMIT 1", (lane, lane)).fetchone()
+                if row:
+                    out = (row[0], row[1])
+            conn.close()
+        except sqlite3.Error:
+            pass
+    _LIMITS[lane] = out
+    return out
+
+
+# Paid spend (TALON-VERTEX-OPS-0, J 10-04: Vertex sessions recorded cost 0.0 at 22.9M tokens).
+# Vertex returns no cost, so it is computed from models.dev prices — the file opencode itself keeps
+# fresh (~/.cache/opencode/models.json). $/1M tokens; Gemini Pro bills a higher tier once the
+# prompt exceeds 200k. Lanes whose provider reports usage.cost (OpenRouter) keep that figure.
+MODELS_DEV = Path(os.environ.get("TALON_MODELS_DEV") or Path.home() / ".cache/opencode/models.json")
+PRICE_PROVIDER = {"vertexii": "google-vertex", "vertex": "google-vertex", "google-vertex": "google-vertex"}
+_PRICES: dict[str, Optional[dict]] = {}
+
+
+def lane_price(lane: str) -> Optional[dict]:
+    """models.dev cost block for a lane ({input, output, cache_read, tiers?}) or None when unpriced."""
+    if lane in _PRICES:
+        return _PRICES[lane]
+    head, _, model = lane.partition("/")
+    out = None
+    if head in PRICE_PROVIDER and MODELS_DEV.exists():
+        try:
+            prov = json.loads(MODELS_DEV.read_text()).get(PRICE_PROVIDER[head]) or {}
+            out = ((prov.get("models") or {}).get(model) or {}).get("cost") or None
+        except (OSError, ValueError):
+            out = None
+    _PRICES[lane] = out
+    return out
+
+
+def normalize_usage(lane: str, usage: dict[str, Any]) -> dict[str, Any]:
+    """Provider usage → Talon usage: thinking counted as output (Vertex bills it but reports it
+    outside completion_tokens), cost filled in from lane_price when the provider sent none."""
+    u = dict(usage or {})
+    p, c = int(u.get("prompt_tokens") or 0), int(u.get("completion_tokens") or 0)
+    r = int(((u.get("completion_tokens_details") or {}).get("reasoning_tokens")) or 0)
+    if r and int(u.get("total_tokens") or 0) >= p + c + r:   # reasoning reported on top of completion
+        u["completion_tokens"] = c = c + r
+    u["reasoning_tokens"] = r
+    if not u.get("cost"):
+        price = lane_price(lane)
+        if price and (p or c):
+            rate = price
+            for t in price.get("tiers") or []:
+                if (t.get("tier") or {}).get("type") == "context" and p > int((t.get("tier") or {}).get("size") or 0):
+                    rate = t
+            cached = int(((u.get("prompt_tokens_details") or {}).get("cached_tokens")) or 0)
+            u["cost"] = ((p - cached) * float(rate.get("input") or 0) + cached * float(rate.get("cache_read") or rate.get("input") or 0)
+                         + c * float(rate.get("output") or 0)) / 1e6
+    return u
+
+
 def _base(provider_id: str) -> Optional[str]:
     b = PROVIDER_BASE_URLS.get(provider_id)
     return b() if callable(b) else b
@@ -94,6 +227,8 @@ def resolve_lane(lane_or_model: str) -> tuple[str, str, str]:
         return base.rstrip("/"), model, key
 
     head = lane.split("/", 1)[0]
+    if head in VERTEX_PROVIDERS and "/" in lane:
+        return _vertex_lane(head, lane.split("/", 1)[1])
     if head in KEYLESS and "/" in lane:
         return _base(head), lane.split("/", 1)[1], "local"
 
@@ -130,6 +265,70 @@ def resolve_lane(lane_or_model: str) -> tuple[str, str, str]:
     raise LaneError(f"unknown lane '{lane}' (not in lane-catalog.db; no endpoint/key for '{head}')")
 
 
+def _read_stream(resp, on_delta) -> dict[str, Any]:
+    """Consume an OpenAI-style SSE completion, emitting deltas; return the equivalent
+    non-streaming response so the caller's parsing is unchanged. Keeps Gemini's per-call
+    extra_content (thought_signature), which must be echoed back on later turns."""
+    content: list[str] = []
+    reasoning: list[str] = []
+    calls: dict[int, dict[str, Any]] = {}
+    finish, usage, error = None, None, None
+    for raw in resp:
+        line = raw.decode("utf-8", errors="replace").strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            continue
+        if chunk.get("error"):
+            error = chunk["error"]
+            break
+        if chunk.get("usage"):
+            usage = chunk["usage"]
+        for ch in chunk.get("choices") or []:
+            d = ch.get("delta") or {}
+            if ch.get("finish_reason"):
+                finish = ch["finish_reason"]
+            thought = ((d.get("extra_content") or {}).get("google") or {}).get("thought")
+            r = d.get("reasoning") or d.get("reasoning_content")
+            if r:
+                reasoning.append(r)
+                on_delta("reasoning", r)
+            if d.get("content"):
+                if thought:
+                    reasoning.append(d["content"])
+                    on_delta("reasoning", d["content"])
+                else:
+                    content.append(d["content"])
+                    on_delta("text", d["content"])
+            for tc in d.get("tool_calls") or []:
+                i = tc.get("index", len(calls))
+                cur = calls.setdefault(i, {"type": "function", "index": i, "id": None,
+                                           "function": {"name": "", "arguments": ""}})
+                if tc.get("id"):
+                    cur["id"] = tc["id"]
+                if tc.get("extra_content"):
+                    cur["extra_content"] = tc["extra_content"]
+                fn = tc.get("function") or {}
+                if fn.get("name"):
+                    cur["function"]["name"] += fn["name"]
+                    on_delta("tool", cur["function"]["name"])
+                if fn.get("arguments"):
+                    cur["function"]["arguments"] += fn["arguments"]
+    if error is not None:
+        return {"error": error}
+    msg: dict[str, Any] = {"role": "assistant", "content": "".join(content)}
+    if calls:
+        msg["tool_calls"] = [dict(c, id=c["id"] or f"call_{i}") for i, c in sorted(calls.items())]
+    if reasoning:
+        msg["reasoning"] = "".join(reasoning)
+    return {"choices": [{"message": msg, "finish_reason": finish}], "usage": usage or {}}
+
+
 _TOOL_TAG = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
 
 
@@ -147,6 +346,36 @@ def _parse_text_tool_calls(content: str) -> list[dict[str, Any]]:
     return calls
 
 
+def _kind(code: Any) -> str:
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        return "server error"
+    return {429: "rate limited", 401: "auth failed", 403: "forbidden", 400: "bad request", 404: "not found",
+            503: "overloaded", 529: "overloaded"}.get(code, "server error" if code >= 500 else "request refused")
+
+
+def _brief(err: Any) -> str:
+    """The provider's own message, one line (Vertex/Google errors nest it as error.message)."""
+    if isinstance(err, str):
+        try:
+            err = json.loads(err)
+        except ValueError:
+            return " ".join(err.split())[:240]
+    if isinstance(err, list) and err:
+        err = err[0]
+    if isinstance(err, dict):
+        inner = err.get("error", err)
+        if isinstance(inner, dict):
+            status = inner.get("status") or ""
+            return " ".join(f"{status} {inner.get('message') or ''}".split())[:240] or str(inner)[:240]
+    return " ".join(str(err).split())[:240]
+
+
+class Cancelled(RuntimeError):
+    """The run was stopped while a model call was in flight; the call is abandoned, not awaited."""
+
+
 class OpenAICompatibleClient:
     """Client for OpenAI-compatible /v1/chat/completions endpoints."""
 
@@ -157,6 +386,48 @@ class OpenAICompatibleClient:
         self.model = model
         self.api_key = api_key
         self.lane = lane or model
+        # on_notice(level, text): server-side events the operator must see — rate limits, overload,
+        # retries, unreachable endpoint (J 10-04). Set by the loop; None = journal only.
+        self.on_notice = None
+        # Set from another thread (talon serve's Stop) to abandon the in-flight call at once. Before
+        # 2026-10-04 Stop only landed between turns; a stalled Vertex read held it ~12 min (J: "kill it").
+        self.cancel = threading.Event()
+
+    def _pause(self, seconds: float) -> None:
+        while seconds > 0:
+            if self.cancel.is_set():
+                raise Cancelled(f"stopped while waiting to retry {self.lane}")
+            time.sleep(min(0.25, seconds))
+            seconds -= 0.25
+
+    def _call(self, req: Any, timeout: int, on_delta: Any) -> dict[str, Any]:
+        """One HTTP round trip on a worker thread; returns early with Cancelled when cancel is set."""
+        if self.cancel.is_set():
+            raise Cancelled(f"stopped before calling {self.lane}")
+        box: dict[str, Any] = {}
+        live = (lambda k, t: None if self.cancel.is_set() else on_delta(k, t)) if on_delta else None
+
+        def work() -> None:
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    box["data"] = _read_stream(resp, live) if live else json.loads(resp.read().decode("utf-8"))
+            except BaseException as e:  # re-raised on the caller's thread
+                box["err"] = e
+        th = threading.Thread(target=work, name="talon-model-call", daemon=True)
+        th.start()
+        while th.is_alive():
+            if self.cancel.wait(0.25):
+                raise Cancelled(f"stopped: in-flight call to {self.lane} abandoned")
+        if "err" in box:
+            raise box["err"]
+        return box["data"]
+
+    def _notice(self, level: str, text: str) -> None:
+        if self.on_notice:
+            try:
+                self.on_notice(level, text)
+            except Exception:
+                pass
 
     @classmethod
     def from_lane(cls, lane_or_model: str) -> "OpenAICompatibleClient":
@@ -169,21 +440,43 @@ class OpenAICompatibleClient:
         tools: Optional[list[dict[str, Any]]] = None,
         stream: bool = False,
         temperature: float = 0.2,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         timeout: int = 180,
         retries: int = 4,
+        on_delta: Optional[Any] = None,
     ) -> dict[str, Any]:
-        """Send one chat completion. Returns the assistant message (+ `_usage`)."""
+        """Send one chat completion. Returns the assistant message (+ `_usage`, `_finish`).
+
+        on_delta(kind, text) streams the reply as it is generated (TALON-SSE-1, J 10-02: "the
+        thoughts/tools and message live stream is not live"): kind is "text", "reasoning",
+        "tool" (a tool call's name as soon as it is known) or "reset" (a retry restarts the reply).
+        Without on_delta the request is a plain non-streaming completion, as before."""
         if os.environ.get("TALON_MOCK") == "1":
             return self._mock_completion(messages, tools)
+        if max_tokens is None:
+            # max_tokens is a ceiling, not spend: only generated tokens are billed. Gemini's hidden
+            # thinking counts against it, so the old blanket 4096 cut long Vertex answers mid-sentence
+            # (J 10-02). Vertex lanes get the model's own output limit (opencode.jsonc limit.output,
+            # else Gemini's 65536). The loop also continues any reply still cut at the cap.
+            max_tokens = int(os.environ.get("TALON_MAX_TOKENS") or self._default_max_tokens())
+            max_tokens = self._fit(max_tokens, messages, tools)
 
         payload: dict[str, Any] = {"model": self.model, "messages": messages,
                                    "temperature": temperature, "max_tokens": max_tokens}
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        if on_delta:
+            payload["stream"] = True
+            payload["stream_options"] = {"include_usage": True}
+            if self.lane.split("/", 1)[0] in VERTEX_PROVIDERS:
+                # Gemini returns thought summaries only when asked; they arrive as content chunks
+                # marked extra_content.google.thought = true.
+                payload["extra_body"] = {"google": {"thinking_config": {"include_thoughts": True}}}
         headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT,
                    "HTTP-Referer": "https://sovereign-fleet.local", "X-Title": "Talon-Agent-Engine"}
+        if self.lane.split("/", 1)[0] in VERTEX_PROVIDERS:
+            self.api_key = adc_token() or self.api_key  # ADC tokens last ~1 h; a session can outlive one
         if self.api_key and self.api_key != "local":
             headers["Authorization"] = f"Bearer {self.api_key}"
         body = json.dumps(payload).encode("utf-8")
@@ -193,8 +486,9 @@ class OpenAICompatibleClient:
         for attempt in range(retries):
             req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
             try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
+                if on_delta and attempt:
+                    on_delta("reset", "")
+                data = self._call(req, timeout, on_delta)
                 if data.get("error"):
                     err = data["error"]
                     code = err.get("code") if isinstance(err, dict) else None
@@ -203,8 +497,10 @@ class OpenAICompatibleClient:
                     if code in (429, 500, 502, 503, 504) and attempt + 1 < retries:
                         wait = min(30, 2 ** attempt * 3)
                         log.warning("in-body %s from %s, retry %d/%d in %ss", code, self.lane, attempt + 1, retries - 1, wait)
-                        time.sleep(wait)
+                        self._notice("warn", f"{_kind(code)} ({code}) from {self.lane}: {_brief(err)} — retry {attempt + 1}/{retries - 1} in {wait}s")
+                        self._pause(wait)
                         continue
+                    self._notice("error", f"{_kind(code)} ({code}) from {self.lane}: {_brief(err)}")
                     raise last_err
                 msg = dict((data.get("choices") or [{}])[0].get("message") or {"role": "assistant", "content": ""})
                 if not msg.get("tool_calls") and "<tool_call>" in (msg.get("content") or ""):
@@ -212,7 +508,8 @@ class OpenAICompatibleClient:
                     if parsed:
                         msg["tool_calls"] = parsed
                         msg["content"] = _TOOL_TAG.sub("", msg["content"]).strip()
-                msg["_usage"] = data.get("usage") or {}
+                msg["_usage"] = normalize_usage(self.lane, data.get("usage") or {})
+                msg["_finish"] = (data.get("choices") or [{}])[0].get("finish_reason")
                 return msg
             except urllib.error.HTTPError as e:
                 err_body = e.read().decode("utf-8", errors="ignore")[:400]
@@ -220,16 +517,32 @@ class OpenAICompatibleClient:
                 if e.code in (429, 500, 502, 503, 504) and attempt + 1 < retries:
                     wait = min(30, 2 ** attempt * 3)
                     log.warning("HTTP %d from %s, retry %d/%d in %ss", e.code, self.lane, attempt + 1, retries - 1, wait)
-                    time.sleep(wait)
+                    self._notice("warn", f"{_kind(e.code)} (HTTP {e.code}) from {self.lane}: {_brief(err_body)} — retry {attempt + 1}/{retries - 1} in {wait}s")
+                    self._pause(wait)
                     continue
+                self._notice("error", f"{_kind(e.code)} (HTTP {e.code}) from {self.lane}: {_brief(err_body)}")
                 raise last_err from e
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
                 last_err = RuntimeError(f"endpoint unreachable for {self.lane} ({endpoint}): {e}")
                 if attempt + 1 < retries:
-                    time.sleep(2 ** attempt)
+                    self._notice("warn", f"endpoint unreachable for {self.lane}: {e} — retry {attempt + 1}/{retries - 1} in {2 ** attempt}s")
+                    self._pause(2 ** attempt)
                     continue
+                self._notice("error", f"endpoint unreachable for {self.lane}: {e}")
                 raise last_err from e
         raise last_err or RuntimeError("completion failed")
+
+    def _default_max_tokens(self) -> int:
+        return lane_limits(self.lane)[1] or 4096
+
+    def _fit(self, max_tokens: int, messages: list[dict[str, Any]], tools: Optional[list]) -> int:
+        """Keep prompt + reply inside the model's context: a request whose max_tokens plus prompt
+        exceeds the window is rejected outright by most providers. ~3.5 chars per token estimate."""
+        ctx = lane_limits(self.lane)[0]
+        if not ctx:
+            return max_tokens
+        est = int(len(json.dumps(messages, default=str)) / 3.5) + (int(len(json.dumps(tools)) / 3.5) if tools else 0)
+        return max(1024, min(max_tokens, ctx - est - 512))
 
     def _mock_completion(
         self, messages: list[dict[str, Any]], tools: Optional[list[dict[str, Any]]]

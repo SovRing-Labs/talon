@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""talon_run — CLI for the Talon Native Agent Engine (TALON-COMPLETE, 2026-09-26).
+"""talon_run — CLI for the Talon Native Agent Engine (2026-09-26).
 
   talon run --agent dev -m <lane> [--title T] [--dir D] [--session S] [--brief PATH] "prompt"
   talon sessions [--json] [-n 20]
@@ -32,6 +32,7 @@ from engine.providers import LaneError, OpenAICompatibleClient, resolve_lane  # 
 from engine.sessions import SessionStore  # noqa: E402
 from engine.tools import OmnitoolBridge  # noqa: E402
 from engine import field  # noqa: E402
+from engine import harness_head  # noqa: E402  (harness-as-head)
 
 DEFAULT_LANE = os.environ.get("TALON_LANE", "openrouter/nvidia/nemotron-3-super-120b-a12b:free")
 
@@ -60,6 +61,53 @@ def _short(v, n=110) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _run_harness_head(args, prompt: str) -> int:
+    """same session / field / inbox / exit contract as an engine run;
+    the harness (Claude Code) runs its own loop and its tools route through the kernel."""
+    os.environ["TALON_ROLE"] = args.role
+    store = SessionStore()
+    if args.session:
+        if not store.get(args.session):
+            print(f"Error: no Talon session {args.session}", file=sys.stderr)
+            return 2
+        sid = args.session
+        store.conn.execute("UPDATE sessions SET status='running', lane=? WHERE id=?", (args.lane, sid))
+        store.conn.commit()
+    else:
+        sid = store.create(title=args.title or prompt.strip().splitlines()[0][:80], role=args.role,
+                           lane=args.lane, cwd=args.dir)
+    print(f"TALON_SESSION {sid}", file=sys.stderr, flush=True)
+    task = os.environ.get("TALON_TASK_ID") or None
+    field.arrive(sid, task, args.role, args.lane)
+    t0 = time.time()
+    say = (lambda s: None) if args.quiet else (lambda s: print(f"[talon head] {s}", file=sys.stderr, flush=True))
+    try:
+        res = harness_head.run_claude_head(prompt=prompt, role=args.role, lane=args.lane, cwd=args.dir, store=store,
+                                           sid=sid, inbox=field.Inbox(sid, task), on_event=say)
+    except KeyboardInterrupt:
+        store.finish(sid, "stopped", "interrupted")
+        return 130
+    except Exception as e:
+        store.finish(sid, "failed", f"{type(e).__name__}: {e}")
+        print(f"Agent execution failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    store.finish(sid, "done" if res["ok"] else "failed", res.get("error"))
+    field.debrief(sid, task, args.role, bool(res["ok"]), res.get("content") or res.get("error") or "")
+    u = res["usage"]
+    say(f"{'done' if res['ok'] else 'FAILED'} · {res['turns']} turn(s) · {u['prompt_tokens']} in / "
+        f"{u['completion_tokens']} out · {time.time() - t0:.1f}s · claude session {res['harness_session']}")
+    if args.json:
+        print(json.dumps({"session": sid, "ok": res["ok"], "turns": res["turns"], "usage": u,
+                          "content": res["content"], "error": res["error"],
+                          "harness_session": res["harness_session"]}))
+    elif res["ok"]:
+        print(res["content"])
+    else:
+        print(f"Error: {res['error']}", file=sys.stderr)   # 'rate limit' text -> dispatcherd lane cooldown
+    store.close()
+    return 0 if res["ok"] else 1
+
+
 def run_cli(argv: list[str]) -> int:
     args = _run_parser().parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -73,6 +121,8 @@ def run_cli(argv: list[str]) -> int:
     if not prompt.strip():
         print("Error: no prompt (use --prompt, --brief, or positional text)", file=sys.stderr)
         return 2
+    if harness_head.handles(args.lane):          # HS-3: a harness that runs its own loop is one of our heads
+        return _run_harness_head(args, prompt)
     try:
         provider = OpenAICompatibleClient.from_lane(args.lane)
     except LaneError as e:
@@ -217,6 +267,72 @@ def lanes_cli(argv: list[str]) -> int:
     return 0
 
 
+def cores_cli(argv: list[str]) -> int:
+    """talon cores [--json] [--receipts N] — the core registry, read-only (FLEET-LOOP-RAPTOR S4; contract v1 §1/§2).
+    Same files as bin/core-registry and launcher-core /cores: CORES_DB / CORE_RECEIPTS, defaults in control-center/."""
+    import sqlite3
+    cc = Path("control-center")
+    p = argparse.ArgumentParser(prog="talon cores")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--receipts", type=int, default=0, metavar="N", help="also show the last N receipts")
+    a = p.parse_args(argv)
+    db = Path(os.environ.get("CORES_DB", cc / "cores.db"))
+    rc = Path(os.environ.get("CORE_RECEIPTS", cc / "core-receipts.jsonl"))
+    if not db.exists():
+        print(f"talon cores: registry not built ({db})", file=sys.stderr)
+        return 1
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    try:
+        cores = [dict(r) for r in con.execute("SELECT * FROM cores ORDER BY core")]
+        ops: dict = {}
+        for r in con.execute("SELECT core, op FROM ops ORDER BY core, op"):
+            ops.setdefault(r["core"], []).append(r["op"])
+    finally:
+        con.close()
+    for c in cores:
+        c["ops"] = ops.get(c["core"], [])
+    recs = []
+    if a.receipts > 0 and rc.exists():
+        for line in rc.read_text(errors="replace").splitlines()[-a.receipts:]:
+            try:
+                recs.append(json.loads(line))
+            except ValueError:
+                pass
+    if a.json:
+        print(json.dumps({"cores": cores, "receipts": recs} if a.receipts > 0 else cores))
+        return 0
+    for c in cores:
+        print(f"{c['status']:<8} {c['core']:<22} v{c['version']:<14} {','.join(c['ops']):<28} fired {c.get('last_fired_ts') or 'never'}")
+    print(f"{sum(c['status'] == 'live' for c in cores)}/{len(cores)} cores live")
+    trit = {"pass": "+1", "error": " 0", "fail": "-1"}
+    for r in recs:
+        print(f"{trit.get(r.get('verdict'), ' ?')} {r.get('ts', ''):<21} {r.get('core', '')}.{r.get('op', '')} "
+              f"{r.get('ms', '?')} ms {r.get('caller', '')}")
+    return 0
+
+
+def ledger_cli(argv: list[str]) -> int:
+    """talon ledger [SESSION] [--json] [--limit N] — core receipts each session caused (engine/ledger.py; syncs first)."""
+    from engine import ledger
+    p = argparse.ArgumentParser(prog="talon ledger")
+    p.add_argument("session", nargs="?")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--limit", type=int, default=50)
+    a = p.parse_args(argv)
+    store = SessionStore()
+    n = ledger.sync(store)
+    rs = ledger.rows(store, a.session, a.limit)
+    if a.json:
+        print(json.dumps(rs))
+        return 0
+    for r in rs:
+        print(f"{ledger.TRIT.get(r['verdict'], '?'):>2} {r['session_id']:<16} {r['core']}.{r['op']:<12} {r['verdict']:<6} "
+              f"{r['ms']} ms  receipt {r['ref']}")
+    print(f"{len(rs)} ledger row(s){f' · {n} new' if n else ''}")
+    return 0
+
+
 def nudge_cli(argv: list[str]) -> int:
     """talon nudge <session-id | task-id> "message" — lands in that run's next turn."""
     p = argparse.ArgumentParser(prog="talon nudge")
@@ -231,7 +347,8 @@ def nudge_cli(argv: list[str]) -> int:
     return 0
 
 
-COMMANDS = {"nudge": nudge_cli, "run": run_cli, "sessions": sessions_cli, "session": session_cli, "lanes": lanes_cli}
+COMMANDS = {"nudge": nudge_cli, "run": run_cli, "sessions": sessions_cli, "session": session_cli, "lanes": lanes_cli,
+            "cores": cores_cli, "ledger": ledger_cli}
 
 
 def main(argv: list[str]) -> int:

@@ -43,7 +43,7 @@
   "swarm_bus_prefix": "commander",
   "session_template": {
     "shell": "/bin/bash",
-    "cwd": "~/ai-stack"
+    "cwd": "~"
   },
   "dispatcherd_db": "control-center/dispatch.db",
   "dispatch_ledger": "control-center/dispatch-ledger.jsonl",

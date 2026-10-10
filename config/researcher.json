@@ -23,7 +23,7 @@
   "swarm_bus_prefix": "researcher",
   "session_template": {
     "shell": "/bin/bash",
-    "cwd": "~/ai-stack"
+    "cwd": "~"
   },
   "research_data_dir": "~/.local/share/terminal-launcher",
   "code_index_db": "~/.local/share/terminal-launcher/code-index.sqlite"

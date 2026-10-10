@@ -1,4 +1,4 @@
-"""Tests for the Talon Native Agent Engine (rewritten TALON-COMPLETE 2026-09-26).
+"""Tests for the Talon Native Agent Engine (rewritten the engine rewrite 2026-09-26).
 
 Hermetic: TALON_MOCK=1 for the model, a temp TALON_DB for sessions. Every test that runs the
 CLI or the loop points TALON_DB at tmp_path so the live session store is never touched.
@@ -192,7 +192,7 @@ def test_server_api_and_cross_origin_refusal(mock_env):
         srv.server_close()
 
 
-# ── stigmergy (STIGMERGY-LOOP 2026-09-27) ─────────────────────────────────────────────
+# ── stigmergy (2026-09-27) ─────────────────────────────────────────────
 def test_inbox_message_lands_at_the_next_turn(mock_env):
     from engine import field
     st = SessionStore()

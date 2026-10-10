@@ -69,7 +69,8 @@ PROMPT_COLORS = {
 }
 
 
-def launch_role_shell(role: str, session_name: str = None) -> None:
+def write_role_rc(role: str) -> Path:
+    """Write /tmp/talon-roles/bashrc-<role>.sh (role env, aliases, command log, error hint, HUD) and return its path."""
     role = role.lower()
     banner = ROLES_BANNER.get(role, ROLES_BANNER["commander"])
     ps1 = PROMPT_COLORS.get(role, PROMPT_COLORS["commander"])
@@ -174,7 +175,7 @@ _talon_hud() {{
 
 # Capture exit code FIRST (before any prompt command clobbers $?), run precmd
 # (exit-code repair) with it, then the HUD.
-PROMPT_COMMAND="precmd $?; _talon_hud; ${{PROMPT_COMMAND:-:}}"
+PROMPT_COMMAND="precmd \\$?; _talon_hud; ${{PROMPT_COMMAND:-:}}"
 
 PS1='{ps1}'
 
@@ -186,6 +187,12 @@ TALON_BANNER_EOF
 """
 
     rc_file.write_text(rc_content, encoding="utf-8")
+    return rc_file
+
+
+def launch_role_shell(role: str, session_name: str = None) -> None:
+    role = role.lower()
+    rc_file = write_role_rc(role)
 
     env = dict(os.environ)
     env["TALON_ROLE"] = role

@@ -23,7 +23,7 @@
   "swarm_bus_prefix": "term-launcher.session",
   "session_template": {
     "shell": "/bin/bash",
-    "cwd": "~/ai-stack"
+    "cwd": "~"
   },
   "cache_ttl_seconds": 300
 }

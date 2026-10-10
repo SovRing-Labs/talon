@@ -1,3 +1,9 @@
+---
+title: "TECHNICAL DISCLOSURE: Local-First Agent Execution Engine, Role-Shell Specialization, and Loopback Server"
+updated: 2026-09-30
+weaver_hash: 556abd1bd95c0c489790ac4a4d4588718c2c078a3eae538eb1637e04aa142e96
+weaver_imported: 2026-10-09T22:22:08+00:00
+---
 # TECHNICAL DISCLOSURE: Local-First Agent Execution Engine, Role-Shell Specialization, and Loopback Server
 
 **Author:** Juan Carlos De Santiago, with the Sovereign Raptor fleet (AI-assisted)  

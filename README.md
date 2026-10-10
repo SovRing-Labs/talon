@@ -1,6 +1,12 @@
+---
+title: "talon: Standalone Agent Runtime & Role-Shell Execution Engine"
+updated: 2026-09-30
+weaver_hash: 442496ffb04b6b513941f9dfce2f9cae9a0f3c71725eb1faa1cbee04292eda82
+weaver_imported: 2026-10-09T22:22:08+00:00
+---
 # talon: Standalone Agent Runtime & Role-Shell Execution Engine
 
-**Version:** 0.1.0  
+**Version:** 0.2.0  
 **Licensor:** Juan Carlos De Santiago  
 **Licence:** Dual **PolyForm Small Business 1.0.0 OR PolyForm Noncommercial 1.0.0** (user's choice). See `LICENSING.md`.  
 **Prior Art Disclosure:** Published defensively as prior art; see `TECHNICAL-DISCLOSURE.md`.
@@ -57,7 +63,7 @@ Run the test suite:
 ```bash
 make test
 ```
-Requires Python 3.10+ and `pytest`.
+Requires Python 3.10+, `pytest` and `pyte` (`pip install pytest pyte`; the terminal render tests import pyte).
 
 ---
 

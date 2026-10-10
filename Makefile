@@ -3,7 +3,7 @@
 # Full suite. Tests that need Omnitool skip unless FLEET_EXEC points at its bin/fleet-exec
 # (git clone https://github.com/SovRing-Labs/omnitool; export FLEET_EXEC=$$PWD/omnitool/bin/fleet-exec).
 test:
-	PYTHONPATH=src pytest -q -rs tests/
+	PYTHONPATH=src python3 -m pytest -q -rs tests/
 	@rm -rf data
 	@echo "All Talon release tests PASSED."
 

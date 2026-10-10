@@ -774,9 +774,10 @@ class TestEnvFiltering:
             data = json.load(f)
         saved_env = data.get("env", {})
         assert "AWS_SECRET_ACCESS_KEY" not in saved_env
-        assert "MY_API_KEY" in saved_env
-        assert "GITHUB_TOKEN" in saved_env
-        assert "PASSWORD" in saved_env
+        # 2026-10-06: these three were asserted IN (the test pinned the leak); any credential word now drops the name
+        assert "MY_API_KEY" not in saved_env
+        assert "GITHUB_TOKEN" not in saved_env
+        assert "PASSWORD" not in saved_env
         assert "SSH_PRIVATE_KEY" not in saved_env
         assert saved_env.get("PATH") == "/usr/bin"
         assert saved_env.get("HOME") == "/tmp/user"
@@ -803,9 +804,9 @@ class TestEnvFiltering:
         assert "PATH" in filtered
         assert "AWS_ACCESS_KEY_ID" not in filtered
         assert "SECRET_TOKEN" not in filtered
-        assert "MY_PASSWORD" in filtered
-        assert "GITHUB_API_KEY" in filtered
-        assert "PRIVATE_KEY" in filtered
+        assert "MY_PASSWORD" not in filtered          # 2026-10-06: was asserted IN (pinned the leak)
+        assert "GITHUB_API_KEY" not in filtered
+        assert "PRIVATE_KEY" not in filtered
 
 
 class TestOutputBufferBound:

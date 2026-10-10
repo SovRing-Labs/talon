@@ -32,6 +32,6 @@
   "swarm_bus_prefix": "dev",
   "session_template": {
     "shell": "/bin/bash",
-    "cwd": "~/ai-stack"
+    "cwd": "~"
   }
 }

@@ -69,6 +69,13 @@ header h1 { font-size: 15px; margin: 0; font-weight: 600; text-wrap: balance; fl
 .tool summary::-webkit-details-marker { display: none; }
 .tool .n { color: var(--life); }
 .tool.fail { border-left-color: var(--err); } .tool.fail .n { color: var(--err); }
+.think { align-self: flex-start; max-width: 78ch; font-size: 12.5px; color: var(--dim); border-left: 2px solid var(--line); padding: 2px 0 2px 10px; }
+.think summary { cursor: pointer; list-style: none; color: var(--dim); }
+.think summary::-webkit-details-marker { display: none; }
+.think .body { white-space: pre-wrap; margin-top: 4px; max-height: 360px; overflow: auto; }
+.think.live summary::after { content: " …"; animation: blink 1.2s steps(2) infinite; }
+.live-caret::after { content: "▍"; animation: blink 1s steps(2) infinite; color: var(--life); }
+@keyframes blink { 50% { opacity: 0; } }
 .tool pre { margin: 6px 0 0; white-space: pre-wrap; max-height: 320px; overflow: auto; background: var(--panel); border: 1px solid var(--line-soft); padding: 8px; border-radius: 6px; color: var(--fg); }
 
 form { border-top: 1px solid var(--line); padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 1fr auto; gap: 8px; background: var(--panel); }
@@ -80,7 +87,26 @@ select { background: var(--bg); border: 1px solid var(--line); border-radius: 8p
 .btn { padding: 7px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); cursor: pointer; }
 .btn.go { background: var(--life); border-color: var(--life); color: #04201e; font-weight: 600; }
 .btn:disabled { opacity: .45; cursor: default; }
-#note { grid-column: 1 / -1; font-size: 12px; color: var(--mute); min-height: 1em; }
+#note { grid-column: 1 / -1; font-size: 12px; color: var(--mute); min-height: 1em; white-space: pre-wrap; }
+/* TALON-VERTEX-OPS-0: spend, context, notices, commands */
+.spend { margin-left: auto; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; cursor: help; }
+.spend b { color: var(--fg); font-weight: 600; }
+.ctx { display: inline-flex; align-items: center; gap: 6px; }
+.meter { position: relative; width: 120px; height: 6px; border-radius: 3px; background: var(--raise); border: 1px solid var(--line); overflow: hidden; }
+.meter i { position: absolute; inset: 0 auto 0 0; background: var(--life); }
+.meter.tier i { background: var(--warn); } .meter.full i { background: var(--err); }
+.meter u { position: absolute; top: -1px; bottom: -1px; width: 1px; background: var(--warn); }
+.facts .money { color: var(--fg); }
+.notice { align-self: stretch; font-family: var(--mono); font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); color: var(--dim); background: var(--panel); white-space: pre-wrap; }
+.notice.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.notice.error { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }
+.notice b { font-weight: 600; margin-right: 6px; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+.summary { align-self: stretch; border: 1px dashed var(--life-deep); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+.summary summary { cursor: pointer; color: var(--life); }
+.summary div { white-space: pre-wrap; margin-top: 6px; color: var(--dim); max-height: 420px; overflow: auto; }
+#hints { grid-column: 1 / -1; display: none; font-family: var(--mono); font-size: 12px; color: var(--dim); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+#hints.on { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; }
+#hints code { color: var(--life); }
 #note.bad { color: var(--err); }
 
 @media (max-width: 760px) {
@@ -93,7 +119,7 @@ select { background: var(--bg); border: 1px solid var(--line); border-radius: 8p
 </head>
 <body>
 <aside>
-  <div class="brand"><span class="dot" id="health" title="server"></span><b>Talon</b><span>sessions</span></div>
+  <div class="brand"><span class="dot" id="health" title="server"></span><b>Talon</b><span>sessions</span><span class="spend" id="spend"></span></div>
   <button class="newbtn" id="new" type="button">+ New session</button>
   <div id="list" role="list"></div>
 </aside>
@@ -104,7 +130,8 @@ select { background: var(--bg); border: 1px solid var(--line); border-radius: 8p
   </header>
   <div id="log" aria-live="polite"><p class="empty">Pick a role and a lane, describe the task, and Talon runs it with the fleet's tools. CLI and dispatcher runs appear on the left too.</p></div>
   <form id="compose">
-    <textarea id="prompt" placeholder="Describe the task. Ctrl+Enter to send." aria-label="Prompt"></textarea>
+    <textarea id="prompt" placeholder="Describe the task. Ctrl+Enter to send · / for commands" aria-label="Prompt"></textarea>
+    <div id="hints" role="note"></div>
     <div class="row">
       <select id="role" aria-label="Role"></select>
       <select id="lane" aria-label="Model lane"></select>
@@ -148,29 +175,83 @@ async function loadList() {
       const it = el("div", "item" + (s.id === current ? " sel" : ""));
       it.setAttribute("role", "listitem"); it.tabIndex = 0;
       it.append(el("span", "t", s.title || s.id), el("span", `pill s-${s.status}`, s.status),
-        el("span", "m", `${s.role} · ${(s.lane || "").split("/").slice(-1)[0]} · ${s.n_messages} msg · ${ago(s.updated_at)}`));
+        el("span", "m", `${s.role} · ${(s.lane || "").split("/").slice(-1)[0]} · ${s.n_messages} msg${s.cost > 0 ? " · " + usd(s.cost) : ""} · ${ago(s.updated_at)}`));
       it.onclick = it.onkeydown = (ev) => { if (ev.type === "click" || ev.key === "Enter") openSession(s.id); };
       return it;
     }));
   } catch (e) { $("health").classList.remove("up"); }
+  loadSpend();
+}
+function usd(v) { v = +v || 0; return v === 0 ? "$0" : v < 0.01 ? "<$0.01" : `$${v.toFixed(2)}`; }
+function kt(n) { n = +n || 0; return n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n); }
+async function loadSpend() {
+  try {
+    const sp = await api("/api/spend");
+    const b = $("spend"); b.replaceChildren(el("b", null, usd(sp.today)), document.createTextNode(" today"));
+    b.title = `Paid spend — today ${usd(sp.today)} · 7 days ${usd(sp.week)} · all ${usd(sp.all)}\n` +
+      (sp.lanes_today || []).map((l) => `${l.lane}: ${usd(l.cost)} (${l.sessions} session${l.sessions > 1 ? "s" : ""})`).join("\n");
+  } catch (e) {}
 }
 
+let sess = null;
+// Context meter: what the model held on the last call vs its window. The amber tick marks a price
+// tier (Gemini Pro bills ~2x per token once the prompt passes 200k).
+function ctxFact(s) {
+  const lim = s.ctx_limit || 0, used = s.ctx_tokens || 0;
+  const tier = ((s.price && s.price.tiers) || []).find((t) => t.tier && t.tier.type === "context");
+  const wrap = el("span", "ctx"); wrap.append(document.createTextNode("context "));
+  if (lim) {
+    const m = el("span", "meter" + (used / lim >= 0.8 ? " full" : tier && used > tier.tier.size ? " tier" : ""));
+    const fill = el("i"); fill.style.width = `${Math.min(100, (100 * used) / lim)}%`; m.append(fill);
+    if (tier) { const t = el("u"); t.style.left = `${(100 * tier.tier.size) / lim}%`; m.append(t); }
+    m.title = `${used.toLocaleString()} of ${lim.toLocaleString()} tokens ${s.ctx_estimated ? "(estimated from the stored history — measured from the next turn)" : "on the last call"}` +
+      (tier ? `\nOver ${kt(tier.tier.size)} context this model bills $${tier.input}/$${tier.output} per 1M (vs $${s.price.input}/$${s.price.output})` : "") +
+      (s.autocompact ? `\nAuto-compact at ${kt(s.autocompact)}` : "\nAuto-compact off (/autocompact 150k)");
+    wrap.append(m);
+  }
+  wrap.append(el("code", null, (used ? `${s.ctx_estimated ? "~" : ""}${kt(used)}${lim ? " / " + kt(lim) + ` (${Math.round((100 * used) / lim)}%)` : ""}` : "not measured yet")
+    + (s.autocompact ? " · auto " + kt(s.autocompact) : "")));
+  return wrap;
+}
 function renderFacts(s) {
+  sess = s;
   const f = [["role", s.role], ["lane", s.lane], ["tokens", `${s.tokens_in.toLocaleString()} in / ${s.tokens_out.toLocaleString()} out`], ["turns", s.turns]];
-  $("facts").replaceChildren(el("span", `pill s-${s.status}`, s.status), ...f.map(([k, v]) => { const sp = el("span", null, `${k} `); sp.append(el("code", null, String(v ?? ""))); return sp; }));
+  // Older servers send neither price nor ctx_limit: say "server restart needed", never "free".
+  const fresh = "price" in s;
+  const cost = el("span", null, "spend "); cost.append(el("code", "money", !fresh ? "— (restart talon-serve)" : s.price || s.cost > 0 ? usd(s.cost) : "free lane"));
+  if (s.price) cost.title = `$${s.price.input} in / $${s.price.output} out per 1M tokens (thinking billed as output)`;
+  $("facts").replaceChildren(el("span", `pill s-${s.status}`, s.status), ...f.map(([k, v]) => { const sp = el("span", null, `${k} `); sp.append(el("code", null, String(v ?? ""))); return sp; }), cost, ...(fresh ? [ctxFact(s)] : []));
   $("title").textContent = s.title || s.id;
   if ([...$("role").options].some((o) => o.value === s.role)) $("role").value = s.role;
   if ([...$("lane").options].some((o) => o.value === s.lane)) $("lane").value = s.lane;
 }
 
-function renderMessages(msgs) {
+function nearBottom() { const l = $("log"); return l.scrollHeight - l.scrollTop - l.clientHeight < 120; }
+function thinkBlock(text, open) {
+  const d = el("details", "think"); if (open) d.open = true;
+  d.append(el("summary", null, "Thinking"), el("div", "body", text));
+  return d;
+}
+function renderMessages(msgs, fromReveal) {
   const log = $("log");
+  const stick = nearBottom();
   if (lastSeq === 0) log.replaceChildren();
   for (const m of msgs) {
+    if (m.seq <= lastSeq && lastSeq !== 0) continue;   // already shown (stream + refresh can overlap)
+    if (!fromReveal && live && live.final && m.seq >= live.final.seq) break;  // still being revealed
     lastSeq = Math.max(lastSeq, m.seq);
     if (m.role === "system") continue;
+    if (m.role === "notice") {
+      const n = el("div", `notice ${m.name || "info"}`); n.append(el("b", null, m.name === "error" ? "error" : m.name === "warn" ? "server" : "info"), document.createTextNode(m.content || ""));
+      log.append(n); continue;
+    }
+    if (m.role === "user" && (m.content || "").startsWith("[Conversation compacted")) {
+      const d = el("details", "summary"); d.append(el("summary", null, "Conversation compacted — the model continues from this summary"), el("div", null, m.content.replace(/^\[[^\]]*\]\s*/, "")));
+      log.append(d); continue;
+    }
     if (m.role === "user") log.append(el("div", "msg user", m.content));
     if (m.role === "assistant") {
+      if (m.reasoning) log.append(thinkBlock(m.reasoning, false));
       if (m.content) log.append(el("div", "msg assistant", m.content));
       for (const tc of m.tool_calls || []) {
         const d = el("details", "tool"); d.dataset.call = tc.id;
@@ -186,7 +267,80 @@ function renderMessages(msgs) {
       d.append(sum, el("pre", null, body)); log.append(d);
     }
   }
-  log.scrollTop = log.scrollHeight;
+  if (stick) log.scrollTop = log.scrollHeight;
+}
+
+// ── live stream (TALON-SSE-1): replaces the 1.2 s polling. Deltas build a live bubble (thinking +
+// text + tool names); each stored message replaces it with the final rendering.
+let es = null, live = null;
+// Smooth reveal (J 10-02: "show thinking a little longer, then output the stream so it feels faster").
+// Network chunks arrive in bursts; the text is buffered and revealed at a steady per-frame rate that
+// speeds up with the backlog (never more than ~1/3 s behind). "Thinking…" holds at least HOLD_MS and
+// folds away when the answer starts. A final stored message waits for the reveal to finish, then
+// replaces the live bubble — no jump.
+const HOLD_MS = 500;
+function liveBubble() {
+  if (live) return live;
+  const wrap = el("div"); wrap.className = "live";
+  // "Thinking…" shows from the first moment of the turn: some models (Gemini 3.8 Flash on Vertex) hold
+  // all output for ~15 s before the first thought arrives, which otherwise looked frozen.
+  const think = thinkBlock("", true); think.classList.add("live"); think.querySelector("summary").textContent = "Thinking";
+  const text = el("div", "msg assistant", "");
+  const tools = el("div");
+  wrap.append(think, tools, text); $("log").append(wrap);
+  live = { wrap, think, thinkBody: think.querySelector(".body"), text, tools, queue: "", started: performance.now(),
+           final: null, raf: 0, folded: false };
+  return live;
+}
+function pump() {
+  const b = live; if (!b) return;
+  b.raf = 0;
+  const held = performance.now() - b.started >= HOLD_MS;
+  if (b.queue && held) {
+    if (!b.folded) { b.think.open = false; b.think.classList.remove("live"); b.text.classList.add("live-caret"); b.folded = true; }
+    const n = Math.max(2, Math.ceil(b.queue.length / 20));
+    const stick = nearBottom();
+    b.text.textContent += b.queue.slice(0, n); b.queue = b.queue.slice(n);
+    if (stick) $("log").scrollTop = $("log").scrollHeight;
+  }
+  if (!b.queue && b.final && held) { const m = b.final; dropLive(); renderMessages([m], true); refresh().catch(() => {}); return; }
+  if (b.queue || b.final || !held) b.raf = requestAnimationFrame(pump);
+}
+function kick() { if (live && !live.raf) live.raf = requestAnimationFrame(pump); }
+function dropLive() { if (live) { if (live.raf) cancelAnimationFrame(live.raf); live.wrap.remove(); live = null; } }
+function setRunning(running) {
+  $("stop").disabled = !running; $("send").disabled = running;
+  $("send").textContent = running ? "Running…" : "Send";
+}
+function openStream(id) {
+  if (es) { es.close(); es = null; }
+  dropLive();
+  es = new EventSource(`/api/sessions/${id}/events`);
+  es.onmessage = (ev) => {
+    if (current !== id) return;
+    let e; try { e = JSON.parse(ev.data); } catch (_) { return; }
+    const stick = nearBottom();
+    if (e.type === "delta") {
+      if (e.kind === "turn" || e.kind === "reset") { dropLive(); if (e.kind === "turn") liveBubble(); }
+      else if (e.kind === "reasoning") { const b = liveBubble(); b.thinkBody.textContent += e.text; }
+      else if (e.kind === "text") { liveBubble().queue += e.text; kick(); }
+      else if (e.kind === "tool") { const b = liveBubble(); b.tools.replaceChildren(el("div", "tool", `→ ${e.text} …`)); }
+    } else if (e.type === "message") {
+      if (e.message.role === "assistant" && live && (live.queue || live.text.textContent)) {
+        live.final = e.message; kick();               // finish the reveal, then swap in the stored message
+      } else {
+        if (e.message.role === "assistant") dropLive();
+        renderMessages([e.message]);
+      }
+      if (e.message.role === "tool") liveBubble();     // the next turn is coming
+    } else if (e.type === "status") {
+      const running = e.status === "running";
+      setRunning(running);
+      if (!running) { if (!(live && live.final)) dropLive(); refresh().catch(() => {}); if (queued) flushQueued(); }
+    }
+    if (stick) $("log").scrollTop = $("log").scrollHeight;
+  };
+  es.onerror = () => { /* EventSource reconnects itself (retry: 2000); refresh fills any gap */ refresh().catch(() => {}); };
 }
 
 async function refresh() {
@@ -194,21 +348,22 @@ async function refresh() {
   const { session, messages } = await api(`/api/sessions/${current}?after=${lastSeq}`);
   renderFacts(session); renderMessages(messages);
   const running = session.status === "running" && session.live;
-  $("stop").disabled = !running; $("send").disabled = running;
-  $("send").textContent = running ? "Running…" : "Send";
+  setRunning(running);
   if (session.status === "failed" && session.error && !running) note(session.error, true);
-  if (!running && polling) { clearInterval(polling); polling = null; loadList(); }
+  if (!running && queued) flushQueued();
 }
 
 async function openSession(id) {
   current = id; lastSeq = 0; note("");
+  if (polling) { clearInterval(polling); polling = null; }
   try { await refresh(); } catch (e) { note(e.message, true); }
   loadList();
-  if (!polling) polling = setInterval(() => refresh().catch(() => {}), 1200);
+  openStream(id);
 }
 
 $("new").onclick = () => {
   current = null; lastSeq = 0; if (polling) { clearInterval(polling); polling = null; }
+  if (es) { es.close(); es = null; } dropLive();
   $("title").textContent = "New session"; $("facts").replaceChildren();
   $("log").replaceChildren(el("p", "empty", "Describe the task below. Talon runs it on the chosen lane with the role's own tools."));
   $("send").textContent = "Run"; $("send").disabled = false; $("stop").disabled = true; note(""); loadList(); $("prompt").focus();
@@ -216,17 +371,88 @@ $("new").onclick = () => {
 $("lane").onchange = () => { try { localStorage.setItem("talon.lane", $("lane").value); } catch (e) {} };
 $("prompt").onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("compose").requestSubmit(); };
 $("stop").onclick = async () => { if (current) { await api(`/api/sessions/${current}/stop`, {}).catch(() => {}); note("Stopping after the current turn…"); } };
+// A follow-up sent while the previous turn is still finishing used to bounce (409) and the text
+// was easy to lose (J 10-02: "it was not taking continue"). Now it is queued and sent the moment
+// the session frees up; the note says so.
+let queued = null;
+async function sendNow(body) {
+  const r = current ? await api(`/api/sessions/${current}/messages`, body) : await api("/api/sessions", body);
+  $("prompt").value = "";
+  if (current === r.id) { setRunning(true); if (!es) openStream(current); }
+  else openSession(r.id);
+}
+async function flushQueued() {
+  if (!queued || queued.sid !== current) return;
+  try { const b = queued.body; queued = null; note(""); await sendNow(b); }
+  catch (err) {
+    if (/still running/.test(err.message)) { queued = queued || { sid: current, body: { prompt: $("prompt").value.trim(), role: $("role").value, lane: $("lane").value } }; setTimeout(flushQueued, 1500); }
+    else note(err.message, true);
+  }
+}
+// Commands (J 10-04): typed in the prompt box, handled here, never sent to the model.
+const COMMANDS = [
+  ["/compact [focus]", "summarise the conversation; the model continues from the summary (cuts context + cost)"],
+  ["/autocompact <tokens|off>", "compact automatically before a turn once context reaches it, e.g. /autocompact 150k"],
+  ["/context", "context used on the last call, window, price tier"],
+  ["/cost", "this session's spend + today / 7 days / all"],
+  ["/stop", "stop after the current turn"],
+  ["/new", "start a new session"],
+  ["/help", "this list"],
+];
+function showHints() {
+  const v = $("prompt").value, h = $("hints");
+  if (!v.startsWith("/") || v.includes("\n")) { h.className = ""; return; }
+  const w = v.split(/\s/)[0];
+  const rows = COMMANDS.filter(([c]) => c.startsWith(w) || w === "/");
+  h.replaceChildren(...rows.flatMap(([c, d]) => [el("code", null, c), el("span", null, d)]));
+  h.className = rows.length ? "on" : "";
+}
+$("prompt").addEventListener("input", showHints);
+function parseTokens(t) { const m = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(t || ""); if (!m) return NaN; return Math.round(+m[1] * ({ k: 1e3, m: 1e6 }[m[2].toLowerCase()] || 1)); }
+async function runCommand(line) {
+  const [cmd, ...rest] = line.split(/\s+/); const arg = rest.join(" ").trim();
+  const done = () => { $("prompt").value = ""; showHints(); };
+  if (cmd === "/help") { note(COMMANDS.map(([c, d]) => `${c} — ${d}`).join("\n")); return done(); }
+  if (cmd === "/new") { done(); return $("new").click(); }
+  if (cmd === "/stop") { done(); return $("stop").click(); }
+  if (cmd === "/cost") {
+    const sp = await api("/api/spend");
+    note(`${sess ? `This session: ${usd(sess.cost)} (${sess.tokens_in.toLocaleString()} in / ${sess.tokens_out.toLocaleString()} out). ` : ""}Today ${usd(sp.today)} · 7 days ${usd(sp.week)} · all ${usd(sp.all)}`);
+    return done();
+  }
+  if (!current) { note("Open a session first.", true); return; }
+  if (cmd === "/context") {
+    const s = sess || {}; const tier = ((s.price && s.price.tiers) || []).find((t) => t.tier && t.tier.type === "context");
+    note(`Context on the last call: ${(s.ctx_tokens || 0).toLocaleString()} of ${(s.ctx_limit || 0).toLocaleString()} tokens.` +
+      (tier ? ` Over ${kt(tier.tier.size)} this model bills $${tier.input}/$${tier.output} per 1M instead of $${s.price.input}/$${s.price.output}.` : "") +
+      ` Auto-compact: ${s.autocompact ? kt(s.autocompact) : "off"}.`);
+    return done();
+  }
+  if (cmd === "/autocompact") {
+    const n = /^(off|0)$/i.test(arg) ? 0 : parseTokens(arg);
+    if (Number.isNaN(n)) { note("Usage: /autocompact 150k   (or off)", true); return; }
+    await api(`/api/sessions/${current}/settings`, { autocompact: n }); done(); return refresh();
+  }
+  if (cmd === "/compact") {
+    await api(`/api/sessions/${current}/compact`, { focus: arg, lane: $("lane").value }); done();
+    setRunning(true); if (!es) openStream(current); return;
+  }
+  note(`Unknown command ${cmd} — /help lists them.`, true);
+}
 $("compose").onsubmit = async (e) => {
   e.preventDefault();
   const prompt = $("prompt").value.trim(); if (!prompt) return;
+  if (prompt.startsWith("/") && !prompt.includes("\n")) { note(""); try { await runCommand(prompt); } catch (err) { note(err.message, true); } return; }
   note(""); $("send").disabled = true;
-  try {
-    const body = { prompt, role: $("role").value, lane: $("lane").value };
-    const r = current ? await api(`/api/sessions/${current}/messages`, body) : await api("/api/sessions", body);
-    $("prompt").value = "";
-    if (current === r.id) { if (!polling) polling = setInterval(() => refresh().catch(() => {}), 1200); refresh(); }
-    else openSession(r.id);
-  } catch (err) { note(err.message, true); $("send").disabled = false; }
+  const body = { prompt, role: $("role").value, lane: $("lane").value };
+  try { await sendNow(body); }
+  catch (err) {
+    if (current && /still running/.test(err.message)) {
+      queued = { sid: current, body };
+      note("Still finishing the last turn — your message is queued and will send when it ends.");
+      setTimeout(flushQueued, 1500);
+    } else { note(err.message, true); $("send").disabled = false; }
+  }
 };
 
 (async () => {

@@ -356,6 +356,8 @@ class PersistQueuePlugin(TerminalPlugin):
         self._ensure_save_thread(ctx)
 
     def on_session_close(self, ctx: PluginContext, session: Session) -> None:
+        if not getattr(session, "persist_on_close", True):
+            return
         try:
             from main import save_session
         except ImportError:

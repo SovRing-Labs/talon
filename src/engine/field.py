@@ -1,4 +1,4 @@
-"""Talon as a stigmergy citizen (STIGMERGY-LOOP, 2026-09-27).
+"""Talon as a stigmergy citizen (2026-09-27).
 
   arrive / debrief   board verbs (bin/log-event → control-center/events.jsonl) + field marks
   Inbox              per-turn delivery of messages addressed to this session or its task:

@@ -1,3 +1,9 @@
+---
+title: "Provenance and Clean-Room Statement: talon"
+updated: 2026-09-29
+weaver_hash: f0da8b4c38290144e5c34d9c6158f01483a7f43a32eab023307cab6072c91b09
+weaver_imported: 2026-10-09T22:22:08+00:00
+---
 # Provenance and Clean-Room Statement: talon
 
 **Component:** talon 0.1.0  
@@ -30,7 +36,7 @@ No proprietary code was referenced or incorporated. All model interaction loops,
 
 | Artifact | Reason for Exclusion |
 |---|---|
-| `roles/*/bin/*` symlinks | Absolute symlinks pointing into local `ai-stack/bin` |
+| `roles/*/bin/*` symlinks | Absolute symlinks pointing into the fleet's local `bin` |
 | `src/role_shell.py.backup` | Scratch development backup |
 | `~/.config/talon/keys.json` | Local user secret API keys |
 | `talon.db` | Operational local session histories |

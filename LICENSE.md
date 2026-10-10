@@ -1,3 +1,9 @@
+---
+title: PolyForm Small Business License 1.0.0
+updated: 2026-09-29
+weaver_hash: 324b2fdc19685ad19e50c8a710d6c27257e29d89e752694367932cb4dfd45abd
+weaver_imported: 2026-10-09T22:22:08+00:00
+---
 Required Notice: Copyright 2026 Juan Carlos De Santiago
 
 # PolyForm Small Business License 1.0.0

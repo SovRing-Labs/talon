@@ -1,3 +1,9 @@
+---
+title: talon — Dossier
+updated: 2026-09-30
+weaver_hash: 18be8518cafb609283dbb3422c49da58d4af5c271d47081d564eaa98d6c9da3b
+weaver_imported: 2026-10-09T22:22:08+00:00
+---
 # talon — Dossier
 
 *History, specification, metrics, tests and limits. Companion to `TECHNICAL-DISCLOSURE.md` and `README.md`.*

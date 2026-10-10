@@ -38,7 +38,7 @@
   "swarm_bus_prefix": "builder",
   "session_template": {
     "shell": "/bin/bash",
-    "cwd": "~/ai-stack"
+    "cwd": "~"
   },
   "snippets_dir": "~/.config/terminal-launcher/snippets",
   "templates_dir": "~/.config/terminal-launcher/templates"

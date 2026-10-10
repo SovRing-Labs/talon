@@ -1,4 +1,4 @@
-"""Role + key configuration for the Talon Agent Engine (TALON-COMPLETE, 2026-09-26).
+"""Role + key configuration for the Talon Agent Engine (2026-09-26).
 
 Roles: read from opencode.jsonc's `agent` blocks (prompt, steps, tools map) so Talon runs the
 same 8 roles opencode does with no second copy of the prompts. A Talon-owned override file
@@ -92,7 +92,7 @@ def role_config(role: str) -> dict:
             pass
     a = (opencode_config().get("agent") or {}).get(role) or {}
     return {
-        "prompt": a.get("prompt") or f"You are the {role} agent in J's sovereign ai-stack fleet.",
+        "prompt": a.get("prompt") or f"You are the {role} agent in a Talon fleet.",
         "steps": int(a.get("steps") or 30),
         "tools": a.get("tools") or {},
     }

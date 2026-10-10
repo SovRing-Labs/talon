@@ -18,6 +18,7 @@ import fcntl
 import json
 import logging
 import os
+import re
 import pickle
 import pty
 import signal
@@ -58,12 +59,14 @@ _CREDENTIAL_PATTERNS = (
     "ANTHROPIC_", "OPENAI_", "GOOGLE_", "SLACK_", "AZURE_",
 )
 _SECRET_ENV_PATTERNS = _CREDENTIAL_PATTERNS  # backwards compat alias
+# the prefix list missed GEMINI_API_KEY (saved into 11 session files, 2026-10-06): any name holding one of these words is dropped
+_CREDENTIAL_WORDS = re.compile(r"KEY|TOKEN|SECRET|PASSW|CREDENTIAL|AUTH|COOKIE|PRIVATE", re.I)
 
 
 def _filter_env(env: dict[str, str]) -> dict[str, str]:
     stripped_keys = []
     for k in env:
-        if k not in SAFE_ENV_VARS and any(pat in k.upper() for pat in _CREDENTIAL_PATTERNS):
+        if k not in SAFE_ENV_VARS and (any(pat in k.upper() for pat in _CREDENTIAL_PATTERNS) or _CREDENTIAL_WORDS.search(k)):
             stripped_keys.append(k)
     filtered = {k: v for k, v in env.items() if k not in stripped_keys}
     # Mute noisy stderr logging in interactive terminal sessions
@@ -627,6 +630,7 @@ class TerminalLauncher:
             if name not in self.sessions:
                 return
             session = self.sessions[name]
+            session.persist_on_close = persist          # plugins that save on close must honour persist=False
             self._invoke_plugin_hook("on_session_close", session)
             if persist:
                 save_session(name, session)
@@ -695,6 +699,20 @@ def get_launcher(role: str = None) -> TerminalLauncher:
 
 
 def selftest() -> bool:
+    # the selftest creates/switches throwaway sessions: keep them out of the real store (it rewrote session-a/b and
+    # test-session in data/terminal-sessions on every run until 2026-10-06)
+    global SESSIONS_DIR
+    import tempfile
+    real = SESSIONS_DIR
+    with tempfile.TemporaryDirectory(prefix="talon-selftest-") as tmp:
+        SESSIONS_DIR = Path(tmp)
+        try:
+            return _selftest()
+        finally:
+            SESSIONS_DIR = real
+
+
+def _selftest() -> bool:
     print("Running terminal-launcher selftest...")
 
     print("  PASS: Module imports")
@@ -759,8 +777,14 @@ def selftest() -> bool:
 
 
 def main() -> None:
-    # Talon engine verbs (TALON-COMPLETE): run / sessions / session / lanes / serve
-    if len(sys.argv) > 1 and sys.argv[1] in ("run", "sessions", "session", "lanes", "serve", "nudge"):
+    # Talon engine verbs: run / sessions / session / lanes / serve
+    if len(sys.argv) > 1 and sys.argv[1] == "term":       # the system terminal (role shell under tritwatch)
+        try:
+            from term import main as term_main
+        except ImportError:   # the release ships without the fleet's tritwatch-based terminal
+            sys.exit("talon term needs the fleet terminal (term.py and tritwatch), which this release does not include")
+        sys.exit(term_main(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] in ("run", "sessions", "session", "lanes", "serve", "nudge", "cores", "ledger"):
         from talon_run import main as talon_main
         sys.exit(talon_main(sys.argv[1:]))
 

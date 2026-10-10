@@ -1,6 +1,6 @@
 """Tool surface bridge for the Talon Agent Engine.
 
-Rewritten 2026-09-26 (TALON-COMPLETE):
+Rewritten 2026-09-26:
   - every mutation (bash, write, edit) goes through Omnitool (bin/fleet-exec): preflight,
     intent/safety classification, write-scope refusal, telemetry. edit = read + replace +
     fleet-exec write, so edits get the same write scope as writes.
@@ -86,6 +86,9 @@ class OmnitoolBridge:
         # identity for Omnitool's field marks (TALON_SESSION / TALON_TASK_ID / TALON_ROLE); per bridge,
         # not process env, so concurrent `talon serve` sessions each mark as themselves
         self.env_extra = {k: v for k, v in (env_extra or {}).items() if v}
+        # FLEET-LOOP-RAPTOR S4: cores fired from this session stamp it on their receipts (engine/ledger.py reads them back)
+        if self.env_extra.get("TALON_SESSION") and "CORE_CALLER" not in self.env_extra:
+            self.env_extra["CORE_CALLER"] = f"talon:{self.env_extra['TALON_SESSION']}"
 
     def get_tool_definitions(self, role: str = "dev", tools_map: Optional[dict] = None) -> list[dict[str, Any]]:
         names = self.allowed or tools_for(tools_map)
@@ -125,20 +128,40 @@ class OmnitoolBridge:
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
         return {"ok": False, "error": f"Unknown tool: '{name}'"}
 
+    def _fleet_via_daemon(self, sock_path: str, operations: list[dict[str, Any]], timeout: float):
+        import socket as _socket
+        s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM); s.settimeout(timeout); s.connect(sock_path)
+        req = {"argv": [json.dumps({"operations": operations})], "cwd": str(self.workspace_root), "env": {**os.environ, **self.env_extra}}
+        s.sendall((json.dumps(req) + "\n").encode()); buf = b""
+        while (k := s.recv(65536)):
+            buf += k
+        s.close()
+        r = json.loads(buf)
+        return r["stdout"], r["stderr"], r["code"]
+
     def _fleet(self, operations: list[dict[str, Any]], timeout: float = 150) -> dict[str, Any]:
-        if not FLEET_EXEC.exists():
-            return {"ok": False, "error": f"fleet-exec not found at {FLEET_EXEC}"}
+        sock = os.environ.get("FLEET_EXEC_SOCK")
+        got = None
+        if sock and os.path.exists(sock):                 # IPC-1: resident fleet-execd fork server (identical output)
+            try:
+                got = self._fleet_via_daemon(sock, operations, timeout)
+            except OSError:
+                got = None                                # daemon gone: fall back to the subprocess below
+        if got is None:
+            if not FLEET_EXEC.exists():
+                return {"ok": False, "error": f"fleet-exec not found at {FLEET_EXEC}"}
+            try:
+                res = subprocess.run([str(FLEET_EXEC), json.dumps({"operations": operations})],
+                                     capture_output=True, text=True, cwd=str(self.workspace_root), timeout=timeout,
+                                     env={**os.environ, **self.env_extra})
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "error": f"Omnitool call timed out after {timeout:.0f}s"}
+            got = (res.stdout, res.stderr, res.returncode)
+        stdout, stderr, code = got
         try:
-            res = subprocess.run([str(FLEET_EXEC), json.dumps({"operations": operations})],
-                                 capture_output=True, text=True, cwd=str(self.workspace_root), timeout=timeout,
-                                 env={**os.environ, **self.env_extra})
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "error": f"Omnitool call timed out after {timeout:.0f}s"}
-        try:
-            data = json.loads(res.stdout)
+            data = json.loads(stdout)
         except Exception:
-            return {"ok": res.returncode == 0, "stdout": _clip(res.stdout), "stderr": _clip(res.stderr),
-                    "exit_code": res.returncode}
+            return {"ok": code == 0, "stdout": _clip(stdout), "stderr": _clip(stderr), "exit_code": code}
         if not data.get("ok", False) and data.get("errs"):
             return {"ok": False, "error": "; ".join(data["errs"])}
         results = data.get("results", [])

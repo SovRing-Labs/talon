@@ -1,9 +1,3 @@
----
-title: PolyForm Noncommercial License 1.0.0
-updated: 2026-09-29
-weaver_hash: e29ceb8667b95cd6ac73de6dcd959ecc28981fe7b4f99da3e3aaa004530498df
-weaver_imported: 2026-10-09T22:22:08+00:00
----
 Required Notice: Copyright 2026 Juan Carlos De Santiago
 
 # PolyForm Noncommercial License 1.0.0

@@ -1,0 +1,20 @@
+# talon
+
+> `talon` is a standalone, lightweight agent execution engine and role-shell runtime developed for the Sovereign Raptor fleet.
+
+Setup: `git clone --depth 1 https://github.com/SovRing-Labs/talon && cd talon && python3 -m venv .venv && . .venv/bin/activate && python -m pip install -q pytest pyte && make test` (expect: All Talon release tests PASSED.).
+Licence: PolyForm Small Business 1.0.0 OR PolyForm Noncommercial 1.0.0 (free trial for evaluation).
+
+## Docs
+- [README.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/README.md)
+- [DOSSIER.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/DOSSIER.md)
+- [TECHNICAL-DISCLOSURE.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/TECHNICAL-DISCLOSURE.md)
+- [PROVENANCE.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/PROVENANCE.md)
+- [LICENSING.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/LICENSING.md)
+- [CITATION.cff](https://raw.githubusercontent.com/SovRing-Labs/talon/main/CITATION.cff)
+- [AGENTS.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/AGENTS.md)
+- [STATUS.md](https://raw.githubusercontent.com/SovRing-Labs/talon/main/STATUS.md)
+- [suite.json](https://raw.githubusercontent.com/SovRing-Labs/talon/main/suite.json)
+
+## Optional
+- [SovRing umbrella (all repos, MCP setup)](https://github.com/SovRing-Labs/SovRing)

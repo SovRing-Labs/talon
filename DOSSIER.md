@@ -38,6 +38,7 @@ system → primitive.
 | Measurement | Result |
 |---|---|
 | Full suite, clean machine | 184 passed, 12 skipped, 0 failed (196 tests) |
+| Full suite, clean machine, 0.2.0 (2026-10-16 re-run) | 207 passed, 13 skipped, 0 failed (220 tests) |
 | Full suite, Omnitool installed | 187 passed, 9 skipped, 0 failed |
 | Full suite, original fleet | 195 / 196 (the one: commander plugins, not shipped) |
 | `talon serve` idle memory | 32.8 MB RSS |

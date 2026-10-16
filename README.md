@@ -1,5 +1,11 @@
 # talon: Standalone Agent Runtime & Role-Shell Execution Engine
 
+<!-- status-badges (REPO-ACCESS-C) -->
+[![status: pre-alpha (under development)](https://img.shields.io/badge/status-pre--alpha%20%28under%20development%29-orange)](STATUS.md) **Status: pre-alpha, under development** — what works today, what is untested and what failed: [`STATUS.md`](STATUS.md)
+
+[![defensive publication: DOI 10.5281/zenodo.23282041](https://img.shields.io/badge/defensive%20publication-DOI%2010.5281%2Fzenodo.23282041-blue)](https://doi.org/10.5281/zenodo.23282041) **Defensive publication:** [`TECHNICAL-DISCLOSURE.md`](TECHNICAL-DISCLOSURE.md) · DOI [10.5281/zenodo.23282041](https://doi.org/10.5281/zenodo.23282041)
+<!-- /status-badges -->
+
 **Version:** 0.2.0  
 **Licensor:** Juan Carlos De Santiago  
 **Licence:** Dual **PolyForm Small Business 1.0.0 OR PolyForm Noncommercial 1.0.0** (user's choice). See `LICENSING.md`.  
@@ -67,6 +73,6 @@ Talon runs every mutating tool call (bash, write, edit) through **Omnitool**: cl
 https://github.com/SovRing-Labs/omnitool and `export FLEET_EXEC=/path/to/omnitool/bin/fleet-exec`. Without it, read-only
 tools work and mutating tools return an explicit error.
 
-`make test` runs the full suite (196 tests). Tests that need Omnitool skip unless `FLEET_EXEC` is set; tests that need a
+`make test` runs the full suite (220 tests: 207 passed, 13 skipped on a clean machine, 2026-10-16). Tests that need Omnitool skip unless `FLEET_EXEC` is set; tests that need a
 lane catalogue, OpenCode role config and provider keys skip unless `TALON_FLEET=1`. Reasons print with `pytest -rs`.
 History, metrics and limits: `DOSSIER.md`.

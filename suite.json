@@ -1,0 +1,256 @@
+{
+ "_about": {
+  "repo": "talon",
+  "url": "https://github.com/SovRing-Labs/talon",
+  "licence": "PolyForm Small Business 1.0.0 OR PolyForm Noncommercial 1.0.0 (your choice); PolyForm Free Trial 1.0.0 for evaluation; data and shard format CC-BY-4.0",
+  "status_file": "STATUS.md",
+  "generated": "2026-10-16",
+  "schema": 1,
+  "one_line": "Standalone agent runtime and role-shell terminal: talon run/serve, multi-provider lanes, tool loop, session store.",
+  "quicktest": "PYTHONPATH=src python3 -m pytest -q -p no:cacheprovider tests/",
+  "quicktest_s": 30,
+  "source": "README.md, DOSSIER.md, CHANGELOG.md, Makefile, release-scan.txt, tests/*.py (12 files)"
+ },
+ "tests": [
+  {
+   "id": "TAL1",
+   "title": "Full test suite: 207 passed, 13 skipped, 0 failed on a fresh clone",
+   "claim": "Talon's whole pytest suite (12 test files) runs green on a clean machine with only python3, pytest and pyte; tests that need Omnitool, a lane catalogue or provider keys skip instead of failing (DOSSIER: '184 passed, 12 skipped, 0 failed (196 tests)' on 2026-10-01; this clone, with the 0.2.0 tests added, gives 207 passed, 13 skipped).",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '207 passed, 13 skipped' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "207 passed, 13 skipped",
+   "evidence": [
+    "DOSSIER.md",
+    "Makefile",
+    "CHANGELOG.md"
+   ],
+   "runtime_s": 60,
+   "needs": [
+    "python3",
+    "pytest",
+    "pyte"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "Every unit and behavioural test shipped in the repo passes with no network, no API key and no Omnitool: the CLI, the provider/lane resolution, the session store, the terminal role shells, the dashboard, the vertex spend/compaction logic and the core ledger. It does not prove that Talon drives a real model well, because every model call in these tests is a mock or a fixture; the 13 skipped tests are exactly the ones that need real infrastructure (see TAL8).",
+   "how_we_got_it": "Command: `PYTHONPATH=src python3 -m pytest -q -rs tests/` (the Makefile target `make test`), run on this laptop on 2026-10-16 in a throw-away copy of the clone. Result printed: 207 passed, 13 skipped. The DOSSIER records an earlier count (Intel i5-8365U, 2026-10-01: 184 passed, 12 skipped, 196 tests) from before the 0.2.0 tests (ledger, cores, ops, loop-length, session-hygiene) were added; see TAL9.",
+   "use_in_your_work": "Gate your own agent-runtime fork or a deployment: clone, run the one command, and you know the engine, CLI and store work on your machine before you point it at a model.",
+   "honest_limits": "The count differs from the DOSSIER's 184/12 because the suite grew in 0.2.0; the repo does not record a fresh-machine count for 0.2.0 itself. Skips are reported, not hidden: SKIPPED lines name their reasons.",
+   "corrections": []
+  },
+  {
+   "id": "TAL2",
+   "title": "Engine core: lane resolution, tool refusal, turn budget, session resume, dead model never becomes a shell command",
+   "claim": "The agent loop resolves lanes (`ollama/<model>`, direct URLs), refuses an unknown lane instead of silently falling back to OpenRouter, refuses disallowed tools, treats turn-budget exhaustion as a failure and resumes saved sessions. Tests that need Omnitool or a fleet skip: 10 passed, 11 skipped.",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/test_talon_run.py) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '10 passed, 11 skipped' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "10 passed, 11 skipped",
+   "evidence": [
+    "tests/test_talon_run.py",
+    "DOSSIER.md"
+   ],
+   "runtime_s": 12,
+   "needs": [
+    "python3",
+    "pytest"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "The engine's decision logic is correct on the cases that were written down: a lane prefix is parsed, an unknown lane is an error rather than a silent fallback, a disallowed tool call is refused, running out of turns exits as a failure, and a session can be resumed. It proves the loop's control flow with a mock model; it does not prove tool execution against a real filesystem, since the tools go through Omnitool (see TAL8).",
+   "how_we_got_it": "tests/test_talon_run.py, run with `PYTHONPATH=src python3 -m pytest -q -rs tests/test_talon_run.py` on this laptop on 2026-10-16: 10 passed, 11 skipped (5 skip for 'needs a lane catalogue, role config and provider keys (TALON_FLEET=1)', 6 for 'needs Omnitool: set FLEET_EXEC'). The test file was written during the 09-26 standalone-engine work recorded in the DOSSIER history.",
+   "use_in_your_work": "Fork Talon and keep these as your regression guard when you add a provider or a tool: they fail the moment a lane silently falls back or a forbidden tool gets through.",
+   "honest_limits": "Half of this file skips on a machine without Omnitool; the skipped half contains the write-scope and real-tool tests. Re-run it with Omnitool in TAL8.",
+   "corrections": []
+  },
+  {
+   "id": "TAL3",
+   "title": "A dead model fails the run and the prompt is never executed as a shell command",
+   "claim": "'if the model cannot be reached, the run fails' (DOSSIER 09-26): the earlier scaffold ran prompts as shell commands when the model was unreachable and still exited 0; Talon has no offline fallback.",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/test_talon_run.py -k dead_model) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '1 passed' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "1 passed",
+   "evidence": [
+    "tests/test_talon_run.py",
+    "DOSSIER.md"
+   ],
+   "runtime_s": 10,
+   "needs": [
+    "python3",
+    "pytest"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "With an unreachable model endpoint, `talon run` ends in failure (non-zero) and the prompt text is not passed to bash. This guards the exact false-green the DOSSIER says the previous scaffold had. It tests one dead-endpoint case, not every network failure mode.",
+   "how_we_got_it": "tests/test_talon_run.py::test_dead_model_fails_and_never_runs_the_prompt_as_bash, selected with `-k dead_model`; run on this laptop on 2026-10-16: 1 passed. The failure it guards is described in the DOSSIER history row dated 09-26.",
+   "use_in_your_work": "Any agent runner you build or buy: this is the test to ask for. A gate that stays green when the model is down is worse than no gate.",
+   "honest_limits": "One mocked failure path; it does not show behaviour under partial responses or timeouts.",
+   "corrections": []
+  },
+  {
+   "id": "TAL4",
+   "title": "Terminal role shells: launcher, dashboard, render gate, PTY sessions (159 passed, 1 skipped)",
+   "claim": "The role-shell terminal (commander, builder, dev, oracle, researcher, grunt, bugstomp) launches PTY sessions, persists and restores them, renders every role banner and the dashboard without a blank screen.",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/test_launcher.py tests/test_main.py tests/test_dashboard_tui.py tests/test_render_gate.py) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '159 passed, 1 skipped' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "159 passed, 1 skipped",
+   "evidence": [
+    "tests/test_launcher.py",
+    "tests/test_render_gate.py",
+    "README.md"
+   ],
+   "runtime_s": 20,
+   "needs": [
+    "python3",
+    "pytest",
+    "pyte"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "Four test files covering the terminal side pass: session create/switch/background/persist, role-plugin discovery, dashboard parsing and text report, and a render gate that feeds the banners through a pyte virtual terminal. They show the terminal logic and drawing are consistent; they do not show it feels right to a person at a real terminal. The one skip is 'commander role plugins are not shipped in 0.1.0'.",
+   "how_we_got_it": "Files tests/test_launcher.py (97 passed, 1 skipped), test_main.py (21), test_dashboard_tui.py (37), test_render_gate.py (4), run together on this laptop on 2026-10-16: 159 passed, 1 skipped. Warnings about forkpty in a multi-threaded process are printed and are not failures.",
+   "use_in_your_work": "Build your own role-specific terminal: the pyte render-gate pattern (assert on a virtual screen, not on strings) is reusable for any curses or ANSI tool.",
+   "honest_limits": "Commander role plugins that read the original fleet's databases are not shipped (DOSSIER Limits); that part is untested here.",
+   "corrections": []
+  },
+  {
+   "id": "TAL5",
+   "title": "Session-store hygiene and output-limit continuation (6 passed)",
+   "claim": "'the test suite and talon --selftest no longer rewrite saved session files, and saved sessions no longer carry the process environment' (CHANGELOG 0.2.0); a final answer cut at the output cap is continued, stored once, and capped at three continuations.",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/test_session_store_hygiene.py tests/test_loop_length_continue.py) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '6 passed' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "6 passed",
+   "evidence": [
+    "CHANGELOG.md",
+    "tests/test_session_store_hygiene.py",
+    "tests/test_loop_length_continue.py"
+   ],
+   "runtime_s": 6,
+   "needs": [
+    "python3",
+    "pytest"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "Credentials are dropped when a session is saved, closing a session without persisting writes nothing (plugins included), the self-test leaves the real store alone, and a length-truncated answer is stitched into one message with at most three continuations. These are the checks that stop a saved session from leaking keys; they cover the listed code paths only.",
+   "how_we_got_it": "Two test files, run on this laptop on 2026-10-16: 6 passed. The hygiene file's docstring is dated 2026-10-06; the continuation file's docstring cites J 10-02.",
+   "use_in_your_work": "If you store agent transcripts, copy the first test: assert that no API key or environment value ever lands in the saved file.",
+   "honest_limits": "The tests use fixtures; they do not scan an existing real session database for old leaked values.",
+   "corrections": []
+  },
+  {
+   "id": "TAL6",
+   "title": "Vertex spend, context, auto-compaction and loop guard (10 passed)",
+   "claim": "Per-session cost is computed for Vertex sessions (thinking tokens counted as output, long-context tier, cache), context and spend are recorded, summaries replace history on compaction, auto-compaction fires at a threshold, a stuck run that repeats itself is paused (CHANGELOG 0.2.0).",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/test_talon_ops.py) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '10 passed' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "10 passed",
+   "evidence": [
+    "tests/test_talon_ops.py",
+    "CHANGELOG.md"
+   ],
+   "runtime_s": 5,
+   "needs": [
+    "python3",
+    "pytest"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "The spend arithmetic and the compaction/loop-guard state machine behave as specified on fixture prices and mocked calls. It does not show that the dollar figures match a real Google bill, because the prices are test fixtures.",
+   "how_we_got_it": "tests/test_talon_ops.py (TALON-VERTEX-OPS-0, dated 2026-10-04 in its docstring), run on this laptop on 2026-10-16: 10 passed.",
+   "use_in_your_work": "Reuse the cost tests as a template for metering any paid-model lane: a thinking-token and cache-tier test catches the most common under-billing bug.",
+   "honest_limits": "Prices are fixtures, not live provider prices.",
+   "corrections": []
+  },
+  {
+   "id": "TAL7",
+   "title": "CLI contract, standalone provider resolution, core registry view and ledger (22 passed, 1 skipped)",
+   "claim": "`talon --help/--list/--selftest` and role flags work; providers resolve from environment keys first; `talon cores` lists the registry; core receipts land in the ledger idempotently.",
+   "kind": "run",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/test_talon_cli.py tests/test_standalone_engine.py tests/test_talon_cores.py tests/test_talon_ledger.py) > \"$T/o\" 2>&1; rc=$?; tail -n 3 \"$T/o\"; grep -Eq '22 passed, 1 skipped' \"$T/o\" && [ $rc -eq 0 ]; r=$?; rm -rf \"$T\"; exit $r",
+   "expect": "22 passed, 1 skipped",
+   "evidence": [
+    "tests/test_talon_cli.py",
+    "tests/test_talon_ledger.py",
+    "DOSSIER.md"
+   ],
+   "runtime_s": 25,
+   "needs": [
+    "python3",
+    "pytest"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "The command-line surface and key lookup order are stable, and the ledger code ingests a fixture receipt file without duplicates, even after truncation. The skip is the end-to-end ledger test against a real core registry (`FLEET-LOOP-REG core-registry not present`), which this repo does not ship.",
+   "how_we_got_it": "Four test files, run on this laptop on 2026-10-16: 22 passed, 1 skipped (test_talon_cli 12, test_standalone_engine 3, test_talon_cores 3, test_talon_ledger 4 passed + 1 skipped).",
+   "use_in_your_work": "A reference for how to test a CLI without a model: assert exit codes and the selected endpoint, never the model's words.",
+   "honest_limits": "The real core registry and receipts are not in this repo, so the ledger is only tested on fixtures.",
+   "corrections": []
+  },
+  {
+   "id": "TAL8",
+   "title": "Omnitool-backed tools, write scope and the loopback-only server with cross-origin refusal",
+   "claim": "'Every mutating tool call goes through Omnitool' and the server is 'loopback only, with Origin checks against cross-site requests' (DOSSIER). With Omnitool installed: 187 passed, 9 skipped, 0 failed.",
+   "kind": "external",
+   "verify": "T=$(mktemp -d); cp -a . \"$T/r\"; (cd \"$T/r\"; export PYTHONDONTWRITEBYTECODE=1 FLEET_EXEC=\"$FLEET_EXEC\"; PYTHONPATH=src python3 -m pytest -q -rs -p no:cacheprovider tests/) | tail -n 3; rm -rf \"$T\"",
+   "expect": "no failures; 6 more tests run than in TAL2 (the Omnitool ones)",
+   "evidence": [
+    "DOSSIER.md",
+    "tests/test_talon_run.py",
+    "Makefile"
+   ],
+   "runtime_s": 60,
+   "needs": [
+    "python3",
+    "pytest",
+    "pyte",
+    "omnitool (git clone https://github.com/SovRing-Labs/omnitool; export FLEET_EXEC=<clone>/bin/fleet-exec)"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "With Omnitool present, the write-scope enforcement, the bash/write/edit/read tools, the cross-origin refusal of the dashboard server and the inbox/debrief stigmergy tests run instead of skipping. The DOSSIER records the outcome as no failures. This is the test that backs the security claim about Origin checks.",
+   "how_we_got_it": "Not re-run here: it needs a second repository (Omnitool) and its fast-exec binary. The DOSSIER records the 2026-10-01 result on an Intel i5-8365U: 'Full suite, Omnitool installed: 187 passed, 9 skipped, 0 failed'. In this clone the same tests report SKIPPED with the reason 'needs Omnitool: set FLEET_EXEC to its bin/fleet-exec'.",
+   "use_in_your_work": "Use it when you adopt Talon for real: it is the check that a model cannot write outside the folders you allow.",
+   "honest_limits": "External dependency and not reproduced in this record; the 187/9 figure is the DOSSIER's, from before 0.2.0.",
+   "corrections": []
+  },
+  {
+   "id": "TAL9",
+   "title": "Recorded metrics and the early '65 passed' correction",
+   "claim": "DOSSIER metrics (2026-10-01, Intel i5-8365U): full suite on a clean machine 184 passed, 12 skipped, 0 failed (196 tests); `talon serve` idle memory 32.8 MB RSS; and the 10-01 history row: the 65 reported at release prep 'covered 4 of 8 test modules; the full suite showed 20 failures, all missing dependencies'.",
+   "kind": "file",
+   "verify": "grep -q '184 passed, 12 skipped, 0 failed (196 tests)' DOSSIER.md && grep -q '32.8 MB RSS' DOSSIER.md && grep -q 'covered 4 of 8 test modules' DOSSIER.md && grep -q 'the full suite showed 20 failures' DOSSIER.md && grep -q 'pytest 66 passed' release-scan.txt && echo 'recorded: 184/12/196, 32.8 MB, 4 of 8 modules, 20 failures, 66 passed'",
+   "expect": "recorded: 184/12/196, 32.8 MB, 4 of 8 modules, 20 failures, 66 passed",
+   "evidence": [
+    "DOSSIER.md",
+    "release-scan.txt"
+   ],
+   "runtime_s": 1,
+   "needs": [
+    "python3",
+    "bash"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "This row keeps a negative result: the release-prep count (66 passed in release-scan.txt, 65 in the DOSSIER) looked like a green suite but covered only half the test modules, and the full run had 20 failures, all missing dependencies. They were fixed by shipping `bin/talon`, an Omnitool path setting and explicit, reasoned skips. It also records the idle-memory figure. Passing here proves only that the repo contains these sentences; it does not re-measure them.",
+   "how_we_got_it": "Written by the release verification of 2026-10-01 per the DOSSIER history table; the memory figure is listed in the DOSSIER metrics table. The measuring command for the 32.8 MB figure is not recorded in the repo.",
+   "use_in_your_work": "A cautionary pattern for your own releases: count the modules your green run actually collected.",
+   "honest_limits": "The RSS number cannot be re-checked from the repo (no harness recorded); the test counts have since moved (see TAL1).",
+   "corrections": []
+  },
+  {
+   "id": "TAL10",
+   "title": "Release scan: no leaked secrets, no development-machine paths, no symlinks",
+   "claim": "gitleaks 8.24.0: no leaks found; home-directory paths of the development machine: 0; symlinks: 0; vendored third-party sources: none (release-scan.txt).",
+   "kind": "file",
+   "verify": "grep -q 'no leaks found' release-scan.txt && grep -q 'machine (grep -rn over the tree): 0' release-scan.txt && grep -q '^Symlinks: 0' release-scan.txt && ! grep -rIl --exclude-dir=.git --exclude=release-scan.txt -E '/home/[a-z]+/' . && echo 'scan recorded; no /home/<user>/ path in the tree'",
+   "expect": "scan recorded; no /home/<user>/ path in the tree",
+   "evidence": [
+    "release-scan.txt",
+    "PROVENANCE.md"
+   ],
+   "runtime_s": 2,
+   "needs": [
+    "python3",
+    "bash",
+    "grep"
+   ],
+   "cpu_flags": [],
+   "what_it_means": "The committed release scan says no secrets and no developer home paths, and the check re-runs a plain grep for `/home/<user>/` over the clone (excluding the scan file itself) and finds nothing. It does not re-run gitleaks.",
+   "how_we_got_it": "release-scan.txt, produced at release prep with gitleaks 8.24.0 (`detect --no-git -s . --redact`) and a grep over the tree; the date is not recorded in the file apart from the 2026-09-29 `make test` line.",
+   "use_in_your_work": "Before you publish your own agent code, run the same two checks: a secret scanner and a grep for your own home directory.",
+   "honest_limits": "The gitleaks result is quoted from the file; only the path grep is re-run.",
+   "corrections": []
+  }
+ ]
+}

@@ -2,8 +2,10 @@
 
 For coding assistants (and people) setting this repository up. Plain steps; every command runs from the repo root.
 
+**Status: pre-alpha, under development.** Interfaces, numbers and file layout can change without notice. Read `STATUS.md` first: what works today (each line names its test and evidence file), what is not yet tested, the known failures and the corrections.
+
 ## What it is
-`talon` is a standalone, lightweight agent execution engine and role-shell runtime developed for the Sovereign Raptor fleet. It provides: 1. The Talon Engine: An autonomous agent loop featuring multi-provider endpoint routing (direct HTTP/vLLM endpoints, local Ollama, OpenRouter, Groq), tool execution through standard JSON protocols (such as Omnitool or built-in tool handlers), turn-level message compaction, and persistent session storage. 2. The Role Shell: Specialized interactive terminal shells configured per agent role (`commander`, `builder`, `dev`, `oracle`, `researcher`, `grunt`, …
+Standalone agent runtime and role-shell terminal: talon run/serve, multi-provider lanes, tool loop, session store.
 
 ## Install and check (3 commands)
 ```bash
@@ -12,10 +14,11 @@ python3 -m venv .venv && . .venv/bin/activate && python -m pip install -q pytest
 make test   # expect: All Talon release tests PASSED.
 ```
 Needs: python3>=3.10, pytest, pyte.
+Whole suite instead: `bash install.sh --no-gui` (python check → venv → every runnable `suite.json` test, headless; without `--no-gui` it then opens the local results page on 127.0.0.1).
 Measured: 45.2s on a fresh clone (Intel i5-8365U laptop, 2026-10-16, exit 0).
 
 ## What the tests mean
-`suite.json` lists every claim this repository makes with its verify command, the expected output, what passing means, how the number was obtained and how to use it in your own work (being written). `STATUS.md` says what works today, what is not yet tested and the known failures; the umbrella's `STATUS.md` has one row per repository.
+`suite.json` lists every claim this repository makes with its verify command, the expected output, what passing means, how the number was obtained and how to use it in your own work (10 tests, in `suite.json` at the repository root). `STATUS.md` says what works today, what is not yet tested and the known failures; the umbrella's `STATUS.md` has one row per repository.
 
 ## Where the evidence is
 - `DOSSIER.md` — history, metrics and limits

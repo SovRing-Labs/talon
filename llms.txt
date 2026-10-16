@@ -1,8 +1,9 @@
 # talon
 
-> `talon` is a standalone, lightweight agent execution engine and role-shell runtime developed for the Sovereign Raptor fleet.
+> Standalone agent runtime and role-shell terminal: talon run/serve, multi-provider lanes, tool loop, session store.
 
 Setup: `git clone --depth 1 https://github.com/SovRing-Labs/talon && cd talon && python3 -m venv .venv && . .venv/bin/activate && python -m pip install -q pytest pyte && make test` (expect: All Talon release tests PASSED.).
+Status: pre-alpha, under development — read STATUS.md before relying on a number.
 Licence: PolyForm Small Business 1.0.0 OR PolyForm Noncommercial 1.0.0 (free trial for evaluation).
 
 ## Docs
